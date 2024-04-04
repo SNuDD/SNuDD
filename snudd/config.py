@@ -34,6 +34,10 @@ Z_xe = 54
 A_xe = 131
 mass_xe = 130.90508414 * u  # from ciaaw.org
 
+Z_ar = 18
+A_ar = 40
+mass_ar = 39.96238312 * u  # ciaaw.org
+
 # Paths
 PATH_NU = get_data("nu_flux/")
 PATH_PROB = get_data("v_probs/")  #get_data("data_old/nu_prob/")

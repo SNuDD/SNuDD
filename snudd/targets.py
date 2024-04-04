@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from snudd import config
-from snudd.binding import ElectronBinder, binding_xe
+from snudd.binding import ElectronBinder, binding_xe, binding_ar
 from snudd.rrpa import rrpa_scaling
 from snudd.spectrum import SpectrumTrace
 from snudd.models import Model, SM
@@ -162,3 +162,6 @@ def j1(x):
 
 nucleus_xe = Nucleus(config.Z_xe, config.A_xe, mass=config.mass_xe)
 electron_xe = Electron(nucleus_xe, binding_xe, scaling=rrpa_scaling)
+
+nucleus_ar = Nucleus(config.Z_ar, config.A_ar, mass=config.mass_ar)
+electron_ar = Electron(nucleus_ar, binding_ar)
