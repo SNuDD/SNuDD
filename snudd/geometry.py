@@ -20,7 +20,7 @@ days_in_yr = 365.25                    # Number of days in earth year
 a             = 1.0                                # Normalize the semimajor axis to 1 AU
 mu            = 4 * np.pi**2                       # Normalize grav pot mu to 4 pi^2 
 T_earth       = 2*np.pi * np.sqrt(a**3/mu)         # Orbital period in years
-r_peri, r_apo = a*(1.-e_earth), a*(1.+e_earth) # Perihelion and aphelion distance as a function of semimajor axis a and eccentricity e_earth
+r_peri, r_apo = a*(1.-e_earth), a*(1.+e_earth)     # Perihelion and aphelion distance as a function of semimajor axis a and eccentricity e_earth
 v_peri, v_apo = [np.sqrt(mu*(2./r - 1./a)) for r in (r_peri, r_apo)] # Perihelion and aphelion scalar velocities
 
 
@@ -97,7 +97,7 @@ class SolarAngles():
         coords, info = ODEint(deriv, X0, times/days_in_yr, full_output=True)
 
         # Return the time series and coordinates; remove first and last coordinate element from ODE solving to match length of times array
-        return times[index_start:], coords[index_start+1:-1]
+        return times[index_start+1:-1], coords[index_start+1:-1]
     
 
 
@@ -107,7 +107,6 @@ class SolarAngles():
         times, coords = self.orbit() 
         x, y   = coords.T[:2]                           # Earth's 2D orbit during data taking period
         thetas = np.arctan2(y, x)                       # True anomaly (angle around Sun taken from perihelion)
-        dist   = np.sqrt(np.pow(x,2) + np.pow(y,2))     # Earth-Sun distance r in AU
 
         # Shifting the angels to the interval [0, 2 Pi] instead of [-Pi, Pi]
         for i in range(len(thetas)):
@@ -118,3 +117,20 @@ class SolarAngles():
 
         return times, zens
 
+
+
+    def zenith_hist(self, bins=25):
+        """Compute binned histogram of zenith angles with [bins] number of bins."""
+
+        _ , coords  = self.orbit() 
+        _ , zeniths = self.zenith_angles()
+
+        # Calculating Earth-Sun distance
+        x, y      = coords.T[:2]                           # Earth's 2D orbit during data taking period
+        dist      = np.sqrt(np.pow(x,2) + np.pow(y,2))     # Earth-Sun distance r in AU
+
+        # Computing weighted histogram (weighting flux to mean distance)
+        weigths, angles = np.histogram(zeniths, bins=2*bins, weights=a**2/np.pow(dist,2)/len(dist), density=False)
+
+        # Return the flux-weighted binned zenith angle histogram
+        return angles, weigths
