@@ -8,8 +8,10 @@ from snudd import config
 
 
 # EARTH ORBIT PARAMETERS
-AU      = 1.495978707e11  # Astronomic unit in m
-e_earth = 0.0167          # Earth orbit eccentricity
+AU         = 1.495978707e11            # Astronomic unit in m
+e_earth    = 0.0167                    # Earth orbit eccentricity
+th_eccl    = 23.44 * np.pi / 180.      # Earth's ecliptic angle in radians
+days_in_yr = 365.25                    # Number of days in earth year
 
 
 
@@ -26,6 +28,11 @@ v_peri, v_apo = [np.sqrt(mu*(2./r - 1./a)) for r in (r_peri, r_apo)] # Perihelio
 
 
 
+
+# HELPER FUNCTIONS
+############################
+
+
 def deriv(X, t):
     """Returns the derivative of the position vector and velocity vector for the system of 1st order eqs"""
     x, v = X.reshape(2, -1)                # Setting the position vector to the current (2D) position and the velocity to the current velocity
@@ -33,7 +40,27 @@ def deriv(X, t):
     return np.hstack((v, acc))             # Returning the velocity and acceleration
 
 
+def azimuth(t):
+    """Returns the azimuth in earth's frame as a function of time in years.
+    Starts at azimuth=0 at t=0"""
+    period = 23. + 56./60. # Earth's revolution period in hours
+    return 2*np.pi / period * (t * days_in_yr * 24) 
 
+
+def zenith(times, thetas, th_det):
+    """Returns the solar neutrino zenith angle (taken from below the horizon) 
+    for a given time series (in years) with corresponding true anomalies (thetas) at detector latitude (th_det)"""
+    nu_dot_n = np.cos(thetas) * (np.cos(th_eccl)*np.sin(th_det)*np.cos(azimuth(times)) + np.sin(th_eccl)*np.cos(th_det)) + \
+               np.sin(thetas) * np.sin(th_det)*np.sin(azimuth(times))
+    
+    return np.pi/2 - np.arccos(nu_dot_n)
+
+
+
+
+
+# SOLAR ZENITH ANGLES
+############################
 
 
 
@@ -67,50 +94,27 @@ class SolarAngles():
             times = times_dat
 
         # SOLVE the differential equations with initial conditions, times in units of years
-        coords, info = ODEint(deriv, X0, times/365., full_output=True)
+        coords, info = ODEint(deriv, X0, times/days_in_yr, full_output=True)
 
-        return times[index_start:], coords[index_start:]
-
-
-# x, y  = coords[1:-1].T[:2]                                     # Earth's 2D orbit during data taking period
-# theta = np.arctan2(y, x)                                       # True anomaly (angle around Sun taken from perihelion)
-# dist  = np.sqrt(np.pow(x,2) + np.pow(y,2))                     # Earth-Sun distance r in AU
-# E     = 2. * np.arctan(np.sqrt((1.-e_earth)/(1.+e_earth)) * np.tan(theta/2))  # Eccentric anomaly (angle about center of ellipse taken from perihelion)
-
-# # Shifting the angels to the interval [0, 2 Pi] instead of [-Pi, Pi]
-# for i in range(len(theta)):
-#     if theta[i] < 0: theta[i] = theta[i] + 2*np.pi
-# for i in range(len(E)):
-#     if E[i] < 0: E[i] = E[i] + 2*np.pi
-
-# # Computing the orbital time from the eccentric anomaly
-# t = a * np.sqrt(a/mu) * (E - e_earth * np.sin(E)) 
-
-
-
-
-
-
-# # Gran Sasso
-# latitude = 42.47 # degrees 
-
-# th_det   = (90. - latitude) * np.pi / 180.      # Latitude in radians
-# th0      = 23.44 * np.pi / 180.                 # Earth's ecliptic angle in radians
-
-# def phi(t):
-#     """Returns the azimuth in earth's frame as a function of time in years"""
-#     period = 23. + 56./60. # Earth's revolution period in hours
-#     return 2*np.pi / period * (t * 365.25 * 24) 
-
-# def zenith(times, thetas):
-#     """Returns the solar neutrino zenith angle (taken from below the horizon) 
-#     for a given time series with corresponding true anomalies (theta)"""
-#     nu_dot_n = np.cos(thetas) * (np.cos(th0)*np.sin(th_det)*np.cos(phi(times)) + np.sin(th0)*np.cos(th_det)) + \
-#                np.sin(thetas) * np.sin(th_det)*np.sin(phi(times))
+        # Return the time series and coordinates; remove first and last coordinate element from ODE solving to match length of times array
+        return times[index_start:], coords[index_start+1:-1]
     
-#     return np.pi/2 - np.arccos(nu_dot_n)
 
 
+    def zenith_angles(self):
+        """Get zenith angles at detector location over data taking period."""
 
-# # Calculate zenith angles
-# zens = zenith(times[1:-1], theta) * 180 / np.pi
+        times, coords = self.orbit() 
+        x, y   = coords.T[:2]                           # Earth's 2D orbit during data taking period
+        thetas = np.arctan2(y, x)                       # True anomaly (angle around Sun taken from perihelion)
+        dist   = np.sqrt(np.pow(x,2) + np.pow(y,2))     # Earth-Sun distance r in AU
+
+        # Shifting the angels to the interval [0, 2 Pi] instead of [-Pi, Pi]
+        for i in range(len(thetas)):
+            if thetas[i] < 0: thetas[i] = thetas[i] + 2*np.pi
+
+        # Calculate zenith angles in radians from below the horizon
+        zens = zenith(times/days_in_yr, thetas, self.lat) 
+
+        return times, zens
+
