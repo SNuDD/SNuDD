@@ -1,8 +1,16 @@
 import os
 import numpy as np
 import pandas as pd
-#from scipy.integrate import trapz
-from numpy import trapz
+from packaging import version
+import importlib.metadata
+
+# Check for scipy version for deprecated 'trapz' method
+module_version = importlib.metadata.version("scipy")
+if version.parse(module_version) >= version.parse("1.14.0"):
+    from scipy.integrate import trapezoid
+else:
+    from scipy.integrate import trapz as trapezoid
+
 from scipy.interpolate import interp1d
 
 
@@ -11,20 +19,22 @@ def get_data(path):
     return os.path.join(_ROOT, '../data', path)
 
 # Constants
-u = 931.49410242 / 1000  # Dalton in GeV
-m_p = 938.27208816 / 1000  # Mass of proton in Gev
-m_n = 939.56542052 / 1000  # Mass of neutron in GeV
-m_e = 0.51099895000 / 1e3  # Mass of electron in GeV
-m_mu = 105.66e-3  # 105.658375523 Mass of muon in GeV
+u     = 931.49410242 / 1000  # Dalton in GeV
+m_p   = 938.27208816 / 1000  # Mass of proton in Gev
+m_n   = 939.56542052 / 1000  # Mass of neutron in GeV
+m_e   = 0.51099895000 / 1e3  # Mass of electron in GeV
+m_mu  = 105.66e-3  # 105.658375523 Mass of muon in GeV
 m_tau = 1.77686  # Mass of tau in GeV
-e = np.sqrt(4 * np.pi / 137)  # e in natural units
-e0 = 1.60217662e-19  # e in Coulombs
-c = 299792458  # c in m/s
+
+e   = np.sqrt(4 * np.pi / 137)  # e in natural units
+e0  = 1.60217662e-19  # e in Coulombs
+c   = 299792458  # c in m/s
 G_F = 1.1663787e-5  # GF in GeV^-2
-sin_weak_2 = 0.23122  # 0.2223  # sin squared of weak mixing angle
-TONNE_YEAR = 60 * 60 * 24 * 365.25 * 1000  # Conversion from kg s to tonne yr
-fm_conv = 5.0678047083  # Conversion from GeV to /fm
-rate_conv = 1e-15 * 1.98e-14 ** 2 * c ** 2 / e0 * TONNE_YEAR
+
+sin_weak_2  = 0.23122  # 0.2223  # sin squared of weak mixing angle
+TONNE_YEAR  = 60 * 60 * 24 * 365.25 * 1000  # Conversion from kg s to tonne yr
+fm_conv     = 5.0678047083  # Conversion from GeV to /fm
+rate_conv   = 1e-15 * 1.98e-14 ** 2 * c ** 2 / e0 * TONNE_YEAR
 
 # Electron SM handedness factors
 g_L = sin_weak_2 - 1 / 2
@@ -99,7 +109,7 @@ for key in NU_SOURCE_KEYS:
     if key in NU_SOURCE_KEYS_MONO:
         continue
     else:
-        nu_integral[key] = trapz(nu_fluxes[key], E_nus[key])
+        nu_integral[key] = trapezoid(nu_fluxes[key], E_nus[key])
 
 for key in NU_SOURCE_KEYS:
     if key in NU_SOURCE_KEYS_MONO:
