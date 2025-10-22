@@ -55,7 +55,7 @@ class SM(Model):
         return np.array([cs_e, cs_mu, cs_tau])  # np array in order to work with vectorized function
 
 
-        return np.array([c_sm, c_int, c_bsm])  # np array in order to work with vectorized function
+        #return np.array([c_sm, c_int, c_bsm])  # np array in order to work with vectorized function
 
 
 class GeneralNSI(Model):

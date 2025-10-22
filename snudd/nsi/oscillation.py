@@ -12,6 +12,7 @@ class OscillationParameters:
     """Dataclass to holding oscillation parameters"""
 
     delta_m12: float
+    delta_m31: float 
     theta_12: float
     theta_13: float
     theta_23: float
@@ -64,6 +65,15 @@ class OscillationParameters:
 
         return np.sin(self.theta_23)
 
+    @property
+    def ordering(self) -> str:
+        """Mass ordering: 'NO' if Δm²₃₁ > 0, else 'IO'."""
+        return "NO" if self.delta_m31 > 0 else "IO"
+
+    @property
+    def delta_m32(self) -> float:
+        """Compute Δm²₃₂ = Δm²₃₁ − Δm²₁₂."""
+        return self.delta_m31 - self.delta_m12
 
 
 def potential_cc(x):
@@ -241,14 +251,42 @@ def gamma_check(E_nu, nsi_model, osc_params, threshold=100):
         print(f'Warning: minimum gamma is {gamma_val}, which is below set threshold of {threshold} for energy {E_nu} GeV. Adiabatic approximation may not be valid.')
 
 
+
+def UPMNS(osc_params):
+    """Return the PMNS mixing matrix."""
+
+    c12 = osc_params.c12
+    s12 = osc_params.s12
+    c13 = osc_params.c13
+    s13 = osc_params.s13
+    c23 = osc_params.c23
+    s23 = osc_params.s23
+    delta_cp = osc_params.delta_cp
+
+    U = np.array([[c12 * c13,
+                   s12 * c13,
+                   s13 * np.exp(-1j * delta_cp)],
+                  [-s12 * c23 - c12 * s23 * s13 * np.exp(1j * delta_cp),
+                   c12 * c23 - s12 * s23 * s13 * np.exp(1j * delta_cp),
+                   s23 * c13],
+                  [s12 * s23 - c12 * c23 * s13 * np.exp(1j * delta_cp),
+                   -c12 * s23 - s12 * c23 * s13 * np.exp(1j * delta_cp),
+                   c23 * c13]], dtype=np.complex128)
+
+    return U
+
+
+
 # OSC VALS FROM 2006.11237
 delta_m12 = 7.50e-5 * (1e-9) ** 2  # GeV^2
+delta_m31 = 2.517e-3 *( 1e-9) ** 2 # GeV^2
 theta_12 = 34.3 * np.pi / 180
 theta_13 = 8.58 * np.pi / 180  # NORMAL ORDERING
 theta_23 = 49.26 * np.pi / 180
 delta_cp = 0.0  # CP angle
 
 osc_params_best = OscillationParameters(delta_m12,
+                                        delta_m31,
                                         theta_12,
                                         theta_13,
                                         theta_23,
