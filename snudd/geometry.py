@@ -127,10 +127,10 @@ class SolarAngles():
 
         # Calculating Earth-Sun distance
         x, y      = coords.T[:2]                           # Earth's 2D orbit during data taking period
-        dist      = np.sqrt(np.pow(x,2) + np.pow(y,2))     # Earth-Sun distance r in AU
-
+        #dist      = np.sqrt(np.pow(x,2) + np.pow(y,2))     # Earth-Sun distance r in AU
+        dist      = np.sqrt(x**2 + y**2)     # Earth-Sun distance r in AU
         # Computing weighted histogram (weighting flux to mean distance)
-        weigths, angles = np.histogram(zeniths, bins=2*bins, weights=a**2/np.pow(dist,2)/len(dist), density=False)
+        weigths, angles = np.histogram(zeniths, bins=2*bins, weights=a**2/(dist**2)/len(dist), density=False)
 
         # Return the flux-weighted binned zenith angle histogram
         return angles, weigths

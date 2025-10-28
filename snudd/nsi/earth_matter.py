@@ -98,9 +98,9 @@ class TabulatedEarth(EarthModel):
 
 
 
-class EarthPropagator:
+class EarthProbEvolve:
     def __init__(self,  model, osc_params=osc.osc_params_best, 
-                 earthmodel: Optional[EarthModel] = None, Nst: int = 200, Nav: int = 200):
+                 earthmodel: Optional[EarthModel] = None, Nst: int = 50, Nav: int = 50):
         self.osc_params = osc_params
         self.model= model
         self.earthmodel = earthmodel  # can be any EarthModel
@@ -157,3 +157,25 @@ class EarthPropagator:
             phase = np.exp(-1j * Em * self.tRad * (xmax - xmin))
             S = S @ (Um @ np.diag(phase) @ Um.conj().T)
         return S
+    
+    def evolve_rhosolar(self, rho_solar, enus_GeV, ceta):
+        """
+        rho_solar_stack: (N,3,3) complex array  [your solar density matrices at Earth surface]
+        enus_GeV       : (N,) energies
+        ceta           : scalar cos(nadir)
+        propagator     : an object with S_matrix(E, ceta) -> (3,3) complex
+
+        Returns:
+        rho_earth_stack : (N,3,3) complex
+        """
+        # 1) build S(E) for all energies
+        S_list = [self.S_matrix(E, ceta) for E in enus_GeV]
+        S = np.stack(S_list, axis=0)                    # (N,3,3)
+        Sdag = np.swapaxes(S.conj(), -1, -2)            # (N,3,3)
+
+        # 2) batch multiply: S ρ S†   (use matmul with batch dims)
+        tmp = np.matmul(S, rho_solar)             # (N,3,3)
+        rho_earth = np.matmul(tmp, Sdag)                # (N,3,3)
+
+
+        return rho_earth 
