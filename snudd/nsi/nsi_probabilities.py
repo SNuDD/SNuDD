@@ -90,6 +90,7 @@ class ProbabilityCalculator:
 
 
 class DensityMatrixCalculator(ProbabilityCalculator):
+    """Class for computing the solar neutrino density matrix"""
 
     def __init__(self, model, osc_params=osc.osc_params_best, adiabatic_check=False):
         super().__init__(model, osc_params, adiabatic_check)
