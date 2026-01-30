@@ -81,8 +81,8 @@ class ProbabilityCalculator:
         xs = np.linspace(0., 0.35, 1000)  # Solar distances to integrate over
         integrand = osc.c12m_2(xs, E_nus, self.model, self.osc_params).T * \
             flux_dists.dist_dict[nu](xs)
-        norm = np.trapz(flux_dists.dist_dict[nu](xs), xs)  # Account for slight lack of norm
-        return np.trapz(integrand, xs) / norm
+        norm = config.trapezoid(flux_dists.dist_dict[nu](xs), xs)  # Account for slight lack of norm
+        return config.trapezoid(integrand, xs) / norm
 
 
 
