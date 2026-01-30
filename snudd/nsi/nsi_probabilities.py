@@ -125,6 +125,13 @@ class DensityMatrixCalculator(ProbabilityCalculator):
                 + np.outer(OMAT[:, 1], OMAT[:, 1]) * abs(OMAT[0, 1] * OMAT[0, 1])
                 + np.outer(OMAT[:, 2], OMAT[:, 2]) * abs(OMAT[0, 2] * OMAT[0, 2]))
 
+    
+    def delta_delta(self, cos_matter_averages):
+    # Delta_delta = 1/2 * s13 * sin(2*theta12) * sin(2*theta23) * cos(2*theta12_m) * cos(delta_CP)
+    term = (0.5 * self.osc_params.s13 * (2 * self.osc_params.s12 * self.osc_params.c12) * (2 * self.osc_params.s23 * self.osc_params.c23) * cos_matter_averages * np.cos(self.osc_params.delta_cp))
+    return term
+
+
     def prob_ee_2nu(self, E_nus, cos_matter_averages):
         "Return the electron survival probability in 2 nu picture."
 
