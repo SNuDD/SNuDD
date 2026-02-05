@@ -128,10 +128,14 @@ class DensityMatrixCalculator(ProbabilityCalculator):
 
 
 
-        
+
+
+
+
+
 
     
-    def delta_delta(self, cos_matter_averages):
+    def delta_delta(self, cos_matter_averages: np.ndarray):
     # Delta_delta = 1/2 * s13 * sin(2*theta12) * sin(2*theta23) * cos(2*theta12_m) * cos(delta_CP)
     term = (0.5 * self.osc_params.s13 * (2 * self.osc_params.s12 * self.osc_params.c12) * (2 * self.osc_params.s23 * self.osc_params.c23) * cos_matter_averages * np.cos(self.osc_params.delta_cp))
     return term
@@ -145,7 +149,7 @@ class DensityMatrixCalculator(ProbabilityCalculator):
         return 0.5 * (1 + cos_matter_averages * self.osc_params.c12_2)
 
 
-    def get_rho_matrix(self, E_nus, cos_matter_averages):
+    def rho_ee(self, E_nus, cos_matter_averages):
     p_ee_2nu = self.prob_ee_2nu(E_nus, cos_matter_averages)
     d_delta = self.delta_delta(cos_matter_averages)
     
@@ -156,34 +160,32 @@ class DensityMatrixCalculator(ProbabilityCalculator):
     s23_2 = self.osc_params.s23**2
     c23_2 = self.osc_params.c23**2
     
-    rho_ee = s13**4 + c13**4 * p_ee_2nu
+    return s13**4 + c13**4 * p_ee_2nu
+
+
+    def rho_mumu(self, E_nus, cos_matter_averages):
+    return c13_2 * (c23_2 * (1 - p_ee_2nu) + s13_2 * s23_2 * (1 + p_ee_2nu) + d_delta)
     
-    rho_mumu = c13_2 * (c23_2 * (1 - p_ee_2nu) + s13_2 * s23_2 * (1 + p_ee_2nu) + d_delta)
+    def rho_tautau(self, E_nus, cos_matter_averages):
+    return c13_2 * (s23_2 * (1 - p_ee_2nu) + s13_2 * c23_2 * (1 + p_ee_2nu) - d_delta)
     
-    rho_tautau = c13_2 * (s23_2 * (1 - p_ee_2nu) + s13_2 * c23_2 * (1 + p_ee_2nu) - d_delta)
-    
+
     # complex terms (rho_emu, rho_etau, rho_mutau)
 
+    def rho_emu(self, E_nus, cos_matter_averages):
     exp_delta = np.exp(1j * self.osc_params.delta_cp)
     sin_2theta12 = 2 * self.osc_params.s12 * self.osc_params.c12
     
     term_emu = 2 * s13 * self.osc_params.s23 * p_ee_2nu + self.osc_params.c23 * sin_2theta12 * cos_matter_averages * exp_delta
-    rho_emu = c13 * s13**3 * self.osc_params.s23 - 0.5 * c13**3 * term_emu
+    return c13 * s13**3 * self.osc_params.s23 - 0.5 * c13**3 * term_emu
     
+    def rho_etau(self, E_nus, cos_matter_averages):
     term_etau = 2 * s13 * self.osc_params.c23 * p_ee_2nu - self.osc_params.s23 * sin_2theta12 * cos_matter_averages * exp_delta
-    rho_etau = c13 * s13**3 * self.osc_params.c23 - 0.5 * c13**3 * term_etau
-
-    return rho_ee, rho_mumu, rho_tautau, rho_emu, rho_etau
-
+    return c13 * s13**3 * self.osc_params.c23 - 0.5 * c13**3 * term_etau
 
     def rho_mutau(self, cos_matter_averages):
-    p_ee_2nu = self.prob_ee_2nu(None, cos_matter_averages) # E_nus non serve se hai già cos_matter
+    p_ee_2nu = self.prob_ee_2nu(None, cos_matter_averages)
     d_delta = self.delta_delta(cos_matter_averages)
-    
-    s13 = self.osc_params.s13
-    c13 = self.osc_params.c13
-    s13_2 = s13**2
-    c13_2 = c13**2
     
     sin_2theta12 = 2 * self.osc_params.s12 * self.osc_params.c12
     sin_2theta23 = 2 * self.osc_params.s23 * self.osc_params.c23
@@ -199,9 +201,25 @@ class DensityMatrixCalculator(ProbabilityCalculator):
     # -i * sin(delta_CP) * s13 * sin(2theta12) * cos(2theta12_m)
     imaginary_part = -1j * np.sin(self.osc_params.delta_cp) * s13 * sin_2theta12 * cos_matter_averages
     
-    rho_mutau_val = 0.5 * c13_2 * (term1 + term2 + imaginary_part)
-    
-    return rho_mutau_val
+    return 0.5 * c13_2 * (term1 + term2 + imaginary_part)
+
+
+    def density(self,E_nus, nu: str):
+        '''Equations A.17 from 2204.03011'''
+
+
+        c2ms = self._cos_matter_average(E_nus, nu)
+
+
+        return np.array([[rho_ee, rho_emu, rho_etau],
+                         [np.conj(rho_emu), rho_mumu, rho_mutau],
+                         [np.conj(rho_etau), np.conj(rho_mutau), rho_tautau]])
+
+
+
+
+
+
 
 
 
