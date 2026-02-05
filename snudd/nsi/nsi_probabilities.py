@@ -125,6 +125,11 @@ class DensityMatrixCalculator(ProbabilityCalculator):
                 + np.outer(OMAT[:, 1], OMAT[:, 1]) * abs(OMAT[0, 1] * OMAT[0, 1])
                 + np.outer(OMAT[:, 2], OMAT[:, 2]) * abs(OMAT[0, 2] * OMAT[0, 2]))
 
+
+
+
+        
+
     
     def delta_delta(self, cos_matter_averages):
     # Delta_delta = 1/2 * s13 * sin(2*theta12) * sin(2*theta23) * cos(2*theta12_m) * cos(delta_CP)
@@ -138,6 +143,74 @@ class DensityMatrixCalculator(ProbabilityCalculator):
         if self.adiabatic_check: osc.gamma_check(E_nus.max(), self.model, self.osc_params)
 
         return 0.5 * (1 + cos_matter_averages * self.osc_params.c12_2)
+
+
+    def get_rho_matrix(self, E_nus, cos_matter_averages):
+    p_ee_2nu = self.prob_ee_2nu(E_nus, cos_matter_averages)
+    d_delta = self.delta_delta(cos_matter_averages)
+    
+    s13 = self.osc_params.s13
+    c13 = self.osc_params.c13
+    s13_2 = s13**2
+    c13_2 = c13**2
+    s23_2 = self.osc_params.s23**2
+    c23_2 = self.osc_params.c23**2
+    
+    rho_ee = s13**4 + c13**4 * p_ee_2nu
+    
+    rho_mumu = c13_2 * (c23_2 * (1 - p_ee_2nu) + s13_2 * s23_2 * (1 + p_ee_2nu) + d_delta)
+    
+    rho_tautau = c13_2 * (s23_2 * (1 - p_ee_2nu) + s13_2 * c23_2 * (1 + p_ee_2nu) - d_delta)
+    
+    # complex terms (rho_emu, rho_etau, rho_mutau)
+
+    exp_delta = np.exp(1j * self.osc_params.delta_cp)
+    sin_2theta12 = 2 * self.osc_params.s12 * self.osc_params.c12
+    
+    term_emu = 2 * s13 * self.osc_params.s23 * p_ee_2nu + self.osc_params.c23 * sin_2theta12 * cos_matter_averages * exp_delta
+    rho_emu = c13 * s13**3 * self.osc_params.s23 - 0.5 * c13**3 * term_emu
+    
+    term_etau = 2 * s13 * self.osc_params.c23 * p_ee_2nu - self.osc_params.s23 * sin_2theta12 * cos_matter_averages * exp_delta
+    rho_etau = c13 * s13**3 * self.osc_params.c23 - 0.5 * c13**3 * term_etau
+
+    return rho_ee, rho_mumu, rho_tautau, rho_emu, rho_etau
+
+
+    def rho_mutau(self, cos_matter_averages):
+    p_ee_2nu = self.prob_ee_2nu(None, cos_matter_averages) # E_nus non serve se hai già cos_matter
+    d_delta = self.delta_delta(cos_matter_averages)
+    
+    s13 = self.osc_params.s13
+    c13 = self.osc_params.c13
+    s13_2 = s13**2
+    c13_2 = c13**2
+    
+    sin_2theta12 = 2 * self.osc_params.s12 * self.osc_params.c12
+    sin_2theta23 = 2 * self.osc_params.s23 * self.osc_params.c23
+    cos_2theta23 = self.osc_params.c23**2 - self.osc_params.s23**2
+    cot_2theta23 = cos_2theta23 / sin_2theta23
+    
+    # sin(2theta23) * ((1 + s13^2) * P_ee_2nu - c13^2)
+    term1 = sin_2theta23 * ((1 + s13_2) * p_ee_2nu - c13_2)
+    
+    # 2 * cot(2theta23) * Delta_delta
+    term2 = 2 * cot_2theta23 * d_delta
+    
+    # -i * sin(delta_CP) * s13 * sin(2theta12) * cos(2theta12_m)
+    imaginary_part = -1j * np.sin(self.osc_params.delta_cp) * s13 * sin_2theta12 * cos_matter_averages
+    
+    rho_mutau_val = 0.5 * c13_2 * (term1 + term2 + imaginary_part)
+    
+    return rho_mutau_val
+
+
+
+
+
+
+
+
+
 
     def prob_2_osc(self, E_nus, cos_matter_averages):
         "Return the electron oscillation probability in 2 nu picture."
