@@ -89,7 +89,7 @@ class ProbabilityCalculator:
 
 
 
-class DensityMatrixCalculator(ProbabilityCalculator):
+class DensityMatrixCalculatorOLD(ProbabilityCalculator):
     """Class for computing the solar neutrino density matrix"""
 
     def __init__(self, model, osc_params=osc.osc_params_best, adiabatic_check=False):
@@ -134,7 +134,8 @@ class DensityMatrixCalculator(ProbabilityCalculator):
 
 
 
-    
+    class DensityMatrixCalculator(ProbabilityCalculator):
+        
     def delta_delta(self, cos_matter_averages: np.ndarray):
     # Delta_delta = 1/2 * s13 * sin(2*theta12) * sin(2*theta23) * cos(2*theta12_m) * cos(delta_CP)
     term = (0.5 * self.osc_params.s13 * (2 * self.osc_params.s12 * self.osc_params.c12) * (2 * self.osc_params.s23 * self.osc_params.c23) * cos_matter_averages * np.cos(self.osc_params.delta_cp))
