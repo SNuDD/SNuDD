@@ -89,140 +89,85 @@ class ProbabilityCalculator:
 
 
 
-class DensityMatrixCalculatorOLD(ProbabilityCalculator):
-    """Class for computing the solar neutrino density matrix"""
 
-    def __init__(self, model, osc_params=osc.osc_params_best, adiabatic_check=False):
+
+
+class DensityMatrixCalculator(ProbabilityCalculator):
+
+    def __init__(self, model, osc_params, adiabatic_check=False):
+    
         super().__init__(model, osc_params, adiabatic_check)
 
-
-    @property
-    def OMAT(self):
-
-        return np.array([[self.osc_params.c13, 0, self.osc_params.s13],
-                         [-self.osc_params.s13 * self.osc_params.s23, self.osc_params.c23, self.osc_params.c13 * self.osc_params.s23],
-                         [-self.osc_params.s13 * self.osc_params.c23, -self.osc_params.s23, self.osc_params.c13 * self.osc_params.c23]])
-
-    @property
-    def AMAT(self):
-        OMAT = self.OMAT
-        return np.outer(OMAT[:, 1], OMAT[:, 1]) - np.outer(OMAT[:, 0], OMAT[:, 0])
-
-    @property
-    def BMAT(self):
-        OMAT = self.OMAT
-        return np.outer(OMAT[:, 0], OMAT[:, 1]) + np.outer(OMAT[:, 1], OMAT[:, 0])
-
-    @property
-    def CMAT(self):
-        OMAT = self.OMAT
-        return np.outer(OMAT[:, 0], OMAT[:, 1]) - np.outer(OMAT[:, 1], OMAT[:, 0])
-
-    @property
-    def DMAT(self):
-        OMAT = self.OMAT
-        return (np.outer(OMAT[:, 0], OMAT[:, 0]) * abs(OMAT[0, 0] * OMAT[0, 0])
-                + np.outer(OMAT[:, 1], OMAT[:, 1]) * abs(OMAT[0, 1] * OMAT[0, 1])
-                + np.outer(OMAT[:, 2], OMAT[:, 2]) * abs(OMAT[0, 2] * OMAT[0, 2]))
-
-
-
-
-
-
-
-
-
-
-    class DensityMatrixCalculator(ProbabilityCalculator):
+    def delta_delta(self, cos_matter_averages):
+        """Calculates the Delta_delta term (Eq. 1.65)."""
+        s13 = self.osc_params.s13
+        s12, c12 = self.osc_params.s12, self.osc_params.c12
+        s23, c23 = self.osc_params.s23, self.osc_params.c23
         
-    def delta_delta(self, cos_matter_averages: np.ndarray):
-    # Delta_delta = 1/2 * s13 * sin(2*theta12) * sin(2*theta23) * cos(2*theta12_m) * cos(delta_CP)
-    term = (0.5 * self.osc_params.s13 * (2 * self.osc_params.s12 * self.osc_params.c12) * (2 * self.osc_params.s23 * self.osc_params.c23) * cos_matter_averages * np.cos(self.osc_params.delta_cp))
-    return term
-
+        term = (0.5 * s13 * (2 * s12 * c12) * (2 * s23 * c23) * cos_matter_averages * np.cos(self.osc_params.delta_cp))
+        return term
 
     def prob_ee_2nu(self, E_nus, cos_matter_averages):
-        "Return the electron survival probability in 2 nu picture."
-
-        if self.adiabatic_check: osc.gamma_check(E_nus.max(), self.model, self.osc_params)
-
+        """Returns the electron survival probability in the 2-neutrino framework."""
         return 0.5 * (1 + cos_matter_averages * self.osc_params.c12_2)
 
+    def get_elements(self, E_nus, cos_matter_averages):
+        """
+        Calculates all individual elements of the rho density matrix.
+        """
+        p_ee_2nu = self.prob_ee_2nu(E_nus, cos_matter_averages)
+        d_delta = self.delta_delta(cos_matter_averages)
+        
+        s13 = self.osc_params.s13
+        c13 = self.osc_params.c13
+        s13_2, c13_2 = s13**2, c13**2
+        s23_2, c23_2 = self.osc_params.s23**2, self.osc_params.c23**2
+        
+        exp_delta = np.exp(1j * self.osc_params.delta_cp)
+        sin_2theta12 = 2 * self.osc_params.s12 * self.osc_params.c12
+        sin_2theta23 = 2 * self.osc_params.s23 * self.osc_params.c23
+        cos_2theta23 = c23_2 - s23_2
+        
+        # Diagonal Elements
+        r_ee = s13**4 + c13**4 * p_ee_2nu
+        r_mm = c13_2 * (c23_2 * (1 - p_ee_2nu) + s13_2 * s23_2 * (1 + p_ee_2nu) + d_delta)
+        r_tt = c13_2 * (s23_2 * (1 - p_ee_2nu) + s13_2 * c23_2 * (1 + p_ee_2nu) - d_delta)
+        
+        # Off-Diagonal Elements 
+        # Electron-Muon
+        term_emu = (2 * s13 * self.osc_params.s23 * p_ee_2nu + 
+                    self.osc_params.c23 * sin_2theta12 * cos_matter_averages * exp_delta)
+        r_em = c13 * s13**3 * self.osc_params.s23 - 0.5 * c13**3 * term_emu
+        
+        # Electron-Tau
+        term_etau = (2 * s13 * self.osc_params.c23 * p_ee_2nu - 
+                     self.osc_params.s23 * sin_2theta12 * cos_matter_averages * exp_delta)
+        r_et = c13 * s13**3 * self.osc_params.c23 - 0.5 * c13**3 * term_etau
+        
+        # Muon-Tau
+        term1 = sin_2theta23 * ((1 + s13_2) * p_ee_2nu - c13_2)
+        term2 = 2 * (cos_2theta23 / sin_2theta23) * d_delta
+        imag_part = (-1j * np.sin(self.osc_params.delta_cp) * s13 * sin_2theta12 * cos_matter_averages)
+        r_mt = 0.5 * c13_2 * (term1 + term2 + imag_part)
+        
+        return r_ee, r_mm, r_tt, r_em, r_et, r_mt
 
-    def rho_ee(self, E_nus, cos_matter_averages):
-    p_ee_2nu = self.prob_ee_2nu(E_nus, cos_matter_averages)
-    d_delta = self.delta_delta(cos_matter_averages)
-    
-    s13 = self.osc_params.s13
-    c13 = self.osc_params.c13
-    s13_2 = s13**2
-    c13_2 = c13**2
-    s23_2 = self.osc_params.s23**2
-    c23_2 = self.osc_params.c23**2
-    
-    return s13**4 + c13**4 * p_ee_2nu
-
-
-    def rho_mumu(self, E_nus, cos_matter_averages):
-    return c13_2 * (c23_2 * (1 - p_ee_2nu) + s13_2 * s23_2 * (1 + p_ee_2nu) + d_delta)
-    
-    def rho_tautau(self, E_nus, cos_matter_averages):
-    return c13_2 * (s23_2 * (1 - p_ee_2nu) + s13_2 * c23_2 * (1 + p_ee_2nu) - d_delta)
-    
-
-    # complex terms (rho_emu, rho_etau, rho_mutau)
-
-    def rho_emu(self, E_nus, cos_matter_averages):
-    exp_delta = np.exp(1j * self.osc_params.delta_cp)
-    sin_2theta12 = 2 * self.osc_params.s12 * self.osc_params.c12
-    
-    term_emu = 2 * s13 * self.osc_params.s23 * p_ee_2nu + self.osc_params.c23 * sin_2theta12 * cos_matter_averages * exp_delta
-    return c13 * s13**3 * self.osc_params.s23 - 0.5 * c13**3 * term_emu
-    
-    def rho_etau(self, E_nus, cos_matter_averages):
-    term_etau = 2 * s13 * self.osc_params.c23 * p_ee_2nu - self.osc_params.s23 * sin_2theta12 * cos_matter_averages * exp_delta
-    return c13 * s13**3 * self.osc_params.c23 - 0.5 * c13**3 * term_etau
-
-    def rho_mutau(self, cos_matter_averages):
-    p_ee_2nu = self.prob_ee_2nu(None, cos_matter_averages)
-    d_delta = self.delta_delta(cos_matter_averages)
-    
-    sin_2theta12 = 2 * self.osc_params.s12 * self.osc_params.c12
-    sin_2theta23 = 2 * self.osc_params.s23 * self.osc_params.c23
-    cos_2theta23 = self.osc_params.c23**2 - self.osc_params.s23**2
-    cot_2theta23 = cos_2theta23 / sin_2theta23
-    
-    # sin(2theta23) * ((1 + s13^2) * P_ee_2nu - c13^2)
-    term1 = sin_2theta23 * ((1 + s13_2) * p_ee_2nu - c13_2)
-    
-    # 2 * cot(2theta23) * Delta_delta
-    term2 = 2 * cot_2theta23 * d_delta
-    
-    # -i * sin(delta_CP) * s13 * sin(2theta12) * cos(2theta12_m)
-    imaginary_part = -1j * np.sin(self.osc_params.delta_cp) * s13 * sin_2theta12 * cos_matter_averages
-    
-    return 0.5 * c13_2 * (term1 + term2 + imaginary_part)
-
-
-    def density(self,E_nus, nu: str):
-        '''Equations A.17 from 2204.03011'''
-
-
+    def density(self, E_nus, nu: str):
+       
+        # Constructs the 3x3 Hermitian density matrix
+   
+        # Get the matter average for the specific source
         c2ms = self._cos_matter_average(E_nus, nu)
+        
+        # Calculate all elements
+        r_ee, r_mm, r_tt, r_em, r_et, r_mt = self.get_elements(E_nus, c2ms)
+        
 
-
-        return np.array([[rho_ee, rho_emu, rho_etau],
-                         [np.conj(rho_emu), rho_mumu, rho_mutau],
-                         [np.conj(rho_etau), np.conj(rho_mutau), rho_tautau]])
-
-
-
-
-
-
-
-
+        res = np.array([[r_ee, r_em, r_et],
+            [np.conj(r_em),   r_mm,            r_mt],
+            [np.conj(r_et),   np.conj(r_mt),   r_tt]])
+        
+        return res
 
 
 
@@ -231,37 +176,11 @@ class DensityMatrixCalculatorOLD(ProbabilityCalculator):
 
 
 
-    def prob_2_osc(self, E_nus, cos_matter_averages):
-        "Return the electron oscillation probability in 2 nu picture."
-        return 1 - self.prob_ee_2nu(E_nus, cos_matter_averages)
-
-    def prob_2_int(self, cos_matter_averages):
-        "Return Prob_int = Re(S^(2)_11 (S^(2)_21)*) as defined in arXiv:2204.03011 eq. A10"
-    
-        c2m = cos_matter_averages
-        return -self.osc_params.s12 * self.osc_params.c12 * c2m * np.cos(self.osc_params.delta_cp)
-
-    def prob_2_ext(self, cos_matter_averages):
-        "Return Prob_ext = Im(S^(2)_11 (S^(2)_21)*) as defined in arXiv:2204.03011 eq. A10"
-
-        c2m = cos_matter_averages
-        return self.osc_params.s12 * self.osc_params.c12 * c2m * np.sin(self.osc_params.delta_cp)
-
-    def density(self,E_nus, nu: str):
-        '''Equations A.17 from 2204.03011'''
 
 
-        c2ms = self._cos_matter_average(E_nus, nu)
 
 
-        DMAT_shape_enhancement = E_nus.shape  # To get Lterm to be correct shape for sum
-
-
-        return self.osc_params.c13**2 * (np.multiply.outer(self.prob_2_osc(E_nus, c2ms), self.AMAT)
-                        + np.multiply.outer(self.prob_2_int(c2ms), self.BMAT)
-                        + 1j * np.multiply.outer(self.prob_2_ext(c2ms), self.CMAT)) + np.multiply.outer(np.ones(DMAT_shape_enhancement), self.DMAT)
-
-
+   
     def interpolate_density_elements(self, E_nu_min=3.4640e-3, E_nu_max=1.8784e1):
 
         """Return dictionary of interpolated de for all nu sources.
