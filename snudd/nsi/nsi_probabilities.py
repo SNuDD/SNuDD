@@ -94,12 +94,12 @@ class ProbabilityCalculator:
 
 class DensityMatrixCalculator(ProbabilityCalculator):
 
-    def __init__(self, model, osc_params, adiabatic_check=False):
-    
+    def __init__(self, model, osc_params=osc.osc_params_best, adiabatic_check=False):
         super().__init__(model, osc_params, adiabatic_check)
 
     def delta_delta(self, cos_matter_averages):
-        """Calculates the Delta_delta term (Eq. 1.65)."""
+
+        # calculates the Delta_delta term
         s13 = self.osc_params.s13
         s12, c12 = self.osc_params.s12, self.osc_params.c12
         s23, c23 = self.osc_params.s23, self.osc_params.c23
@@ -108,13 +108,13 @@ class DensityMatrixCalculator(ProbabilityCalculator):
         return term
 
     def prob_ee_2nu(self, E_nus, cos_matter_averages):
-        """Returns the electron survival probability in the 2-neutrino framework."""
+
+        # returns the electron survival probability in the 2-neutrino framework
         return 0.5 * (1 + cos_matter_averages * self.osc_params.c12_2)
 
     def get_elements(self, E_nus, cos_matter_averages):
-        """
-        Calculates all individual elements of the rho density matrix.
-        """
+        
+        # calculates all individual elements of the rho density matrix
         p_ee_2nu = self.prob_ee_2nu(E_nus, cos_matter_averages)
         d_delta = self.delta_delta(cos_matter_averages)
         
@@ -128,23 +128,23 @@ class DensityMatrixCalculator(ProbabilityCalculator):
         sin_2theta23 = 2 * self.osc_params.s23 * self.osc_params.c23
         cos_2theta23 = c23_2 - s23_2
         
-        # Diagonal Elements
+        # diagonal elements
         r_ee = s13**4 + c13**4 * p_ee_2nu
         r_mm = c13_2 * (c23_2 * (1 - p_ee_2nu) + s13_2 * s23_2 * (1 + p_ee_2nu) + d_delta)
         r_tt = c13_2 * (s23_2 * (1 - p_ee_2nu) + s13_2 * c23_2 * (1 + p_ee_2nu) - d_delta)
         
-        # Off-Diagonal Elements 
-        # Electron-Muon
+        # off-diagonal elements 
+        # electron-muon
         term_emu = (2 * s13 * self.osc_params.s23 * p_ee_2nu + 
                     self.osc_params.c23 * sin_2theta12 * cos_matter_averages * exp_delta)
         r_em = c13 * s13**3 * self.osc_params.s23 - 0.5 * c13**3 * term_emu
         
-        # Electron-Tau
+        # electron-tau
         term_etau = (2 * s13 * self.osc_params.c23 * p_ee_2nu - 
                      self.osc_params.s23 * sin_2theta12 * cos_matter_averages * exp_delta)
         r_et = c13 * s13**3 * self.osc_params.c23 - 0.5 * c13**3 * term_etau
         
-        # Muon-Tau
+        # muon-tau
         term1 = sin_2theta23 * ((1 + s13_2) * p_ee_2nu - c13_2)
         term2 = 2 * (cos_2theta23 / sin_2theta23) * d_delta
         imag_part = (-1j * np.sin(self.osc_params.delta_cp) * s13 * sin_2theta12 * cos_matter_averages)
@@ -153,21 +153,20 @@ class DensityMatrixCalculator(ProbabilityCalculator):
         return r_ee, r_mm, r_tt, r_em, r_et, r_mt
 
     def density(self, E_nus, nu: str):
-       
-        # Constructs the 3x3 Hermitian density matrix
-   
-        # Get the matter average for the specific source
+
+        # returns an array of matrices with shape (N, 3, 3)
         c2ms = self._cos_matter_average(E_nus, nu)
-        
-        # Calculate all elements
         r_ee, r_mm, r_tt, r_em, r_et, r_mt = self.get_elements(E_nus, c2ms)
         
-
-        res = np.array([[r_ee, r_em, r_et],
-            [np.conj(r_em),   r_mm,            r_mt],
-            [np.conj(r_et),   np.conj(r_mt),   r_tt]])
+        # ensure it's treated as an array even for single energy
+        n = len(np.atleast_1d(E_nus))
+        matrix = np.zeros((n, 3, 3), dtype=complex)
         
-        return res
+        matrix[:, 0, 0], matrix[:, 1, 1], matrix[:, 2, 2] = r_ee, r_mm, r_tt
+        matrix[:, 0, 1], matrix[:, 0, 2], matrix[:, 1, 2] = r_em, r_et, r_mt
+        matrix[:, 1, 0], matrix[:, 2, 0], matrix[:, 2, 1] = np.conj(r_em), np.conj(r_et), np.conj(r_mt)
+        
+        return matrix 
 
 
 

@@ -114,7 +114,7 @@ def eps_D(nsi_model, osc_params):
 
 
 def eps_N(nsi_model, osc_params):
-    """The eps_D parameter."""
+    """The eps_N parameter."""
 
     eps_matrix = nsi_model.eps_matrix
 
@@ -135,40 +135,62 @@ def eps_N(nsi_model, osc_params):
 def delta_vacuum_energy(E_nu, osc_params):
     """Return the difference in the vacuum energy eigenvalues between first and second mass eigenstates."""
 
-    return osc_params.delta_m12 / (2 * E_nu)
+    return osc_params.delta_m12 / (4 * E_nu)
+
+
+
+"""The two fit"""
+
+def V_fit(x):
+
+    return np.sqrt(2) * config.G_F * 10**(2.36 - 4.52* x - 0.33 * np.exp(-(x/0.075)**1.1))
+
+
+def xi_fit(x, nsi_model):
+
+    xi_charge = nsi_model.xi_p + nsi_model.xi_e
+
+    return xi_charge + nsi_model.xi_n * 10**(1.72 - 4*x) / 10**(2.36 - 4.52* x - 0.33 * np.exp(-(x/0.075)**1.1))
+
+
 
 
 def p(x, E_nu, nsi_model, osc_params):
     """Return our defined p parameter."""
 
     s12_2 = osc_params.s12_2
-
-    return np.squeeze(s12_2 + np.multiply.outer(2 * xi(x, nsi_model) * eps_N(nsi_model, osc_params) *
-                            potential_cc(x), 1 / delta_vacuum_energy(E_nu, osc_params)))
+    delta_cp = osc_params.delta_cp
+    d_vac = delta_vacuum_energy(E_nu, osc_params)
+    
+    matter_term = xi(x, nsi_model) * V_fit(x) * eps_N(nsi_model, osc_params)
+    
+    real_part = np.add.outer(matter_term, d_vac * s12_2 * np.cos(delta_cp))
+    imag_part = np.add.outer(matter_term, d_vac * s12_2 * np.sin(delta_cp))
+    
+    return np.sqrt(real_part**2 + imag_part**2) / d_vac
 
 
 def q(x, E_nu, nsi_model, osc_params):
-    """Return our defined p parameter."""
+    """Return our defined q parameter."""
 
     c12_2 = osc_params.c12_2
+    c13_2 = osc_params.c13 ** 2
+    d_vac = delta_vacuum_energy(E_nu, osc_params)
+    
+    matter_part = (xi(x, nsi_model) * eps_D(nsi_model, osc_params) - 0.5 * c13_2) * V_fit(x)
+    
+    return c12_2 + np.divide.outer(matter_part, d_vac)
 
-    return np.squeeze(c12_2 + np.multiply.outer((2 * xi(x, nsi_model) * eps_D(nsi_model, osc_params) - osc_params.c13 ** 2) *
-                            potential_cc(x), 1 / delta_vacuum_energy(E_nu, osc_params)))
 
 
 def delta_matter_energy(x, E_nu, nsi_model, osc_params):
-    """Return the difference in the matter energy eigenvalues between first
-    and second mass eigenstates.
-    """
+    """Return the difference in the matter energy eigenvalues between first and second mass eigenstates."""
 
-    return delta_vacuum_energy(E_nu, osc_params) * np.sqrt(p(x, E_nu, nsi_model, osc_params) ** 2 +
-                                                           q(x, E_nu, nsi_model, osc_params) ** 2)
+    return delta_vacuum_energy(E_nu, osc_params) * np.sqrt(p(x, E_nu, nsi_model, osc_params) ** 2 + q(x, E_nu, nsi_model, osc_params) ** 2)
 
 
 def potential_cc_dot(x):
-    """Return derivative of charged-current potential with respect to solar
-    fraction.
-    """
+    """Return derivative of charged-current potential with respect to solar fraction."""
 
     return np.sqrt(2) * config.G_F * solar_profiles.electron_density_derivative(x)
 
@@ -178,23 +200,6 @@ def xi_dot(x, nsi_model):
 
     return nsi_model.xi_n * solar_profiles.neutron_electron_fraction_derivative(x)
 
-
-def p_dot(x, E_nu, nsi_model, osc_params):
-    """Return derivative of q parameter."""
-
-    return np.multiply.outer(2 * eps_N(nsi_model, osc_params) *
-                    (xi(x, nsi_model) * potential_cc_dot(x) + xi_dot(x, nsi_model) * potential_cc(x)),
-                    1 / delta_vacuum_energy(E_nu, osc_params))
-
-
-def q_dot(x, E_nu, nsi_model, osc_params):
-    """Return derivative of q parameter."""
-
-    c13 = osc_params.c13
-
-    return np.multiply.outer((2 * eps_D(nsi_model, osc_params) * (xi(x, nsi_model) * potential_cc_dot(x) +
-                                                                    xi_dot(x, nsi_model) * potential_cc(x)) -
-                                            c13 ** 2 * potential_cc_dot(x)), 1 / delta_vacuum_energy(E_nu, osc_params))
 
 
 def t12m_2(x, E_nu, nsi_model, osc_params):
@@ -206,8 +211,7 @@ def t12m_2(x, E_nu, nsi_model, osc_params):
 def s12m_2(x, E_nu, nsi_model, osc_params):
     """Return the sin of twice the mixing angle in matter."""
 
-    return p(x, E_nu, nsi_model, osc_params) / (np.sqrt(p(x, E_nu, nsi_model,
-                                                          osc_params) ** 2 + q(x, E_nu, nsi_model, osc_params) ** 2))
+    return p(x, E_nu, nsi_model, osc_params) / (np.sqrt(p(x, E_nu, nsi_model, osc_params) ** 2 + q(x, E_nu, nsi_model, osc_params) ** 2))
 
 
 def c12m_2(x, E_nu, nsi_model, osc_params):
@@ -216,29 +220,125 @@ def c12m_2(x, E_nu, nsi_model, osc_params):
     return q(x, E_nu, nsi_model, osc_params) / (np.sqrt(p(x, E_nu, nsi_model, osc_params) ** 2 + q(x, E_nu, nsi_model, osc_params) ** 2))
 
 
+
+
+"""Here def of tanchi, tanchi_dot, chi_dot, theta_dot..."""
+
+
+def tanchi(x, E_nu, nsi_model, osc_params):
+
+    sin_2theta12 = 2 * osc_params.s12 * osc_params.c12
+
+    return - (delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 * np.sin(osc_params.delta_cp)) / (delta_vacuum_energy(E_nu, osc_params) * 
+                sin_2theta12 * np.cos(osc_params.delta_cp) + np.multiply.outer(xi(x, nsi_model) * V_fit(x), eps_N(nsi_model, osc_params)))
+
+
+
+
+def f_dot(x, E_nu, nsi_model, osc_params):
+
+    return np.gradient(V_fit(x), x) * xi_fit(x, nsi_model) + V_fit(x) * np.gradient(xi_fit(x, nsi_model), x)
+
+
+
+def tanchi_dot(x, E_nu, nsi_model, osc_params):
+
+    sin_2theta12 = 2 * osc_params.s12 * osc_params.c12
+
+    return (delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 * f_dot(x, E_nu, nsi_model, osc_params) *  np.sin(osc_params.delta_cp) * 
+              eps_N(nsi_model, osc_params)) / (delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 *  np.cos(osc_params.delta_cp) + 
+              V_fit(x) * xi_fit(x, nsi_model) * eps_N(nsi_model, osc_params))**2
+
+def chi_dot(x, E_nu, nsi_model, osc_params):
+
+    return np.cos(np.arctan(tanchi(x, E_nu, nsi_model, osc_params)))**2 * tanchi_dot(x, E_nu, nsi_model, osc_params)
+
+
+
+def p_dot(x, E_nu, nsi_model, osc_params):
+    """Derivative of the p parameter with respect to solar radius x."""
+
+    p_val = p(x, E_nu, nsi_model, osc_params)
+    s12_2 = 2 * osc_params.s12 * osc_params.c12
+    d_vac = delta_vacuum_energy(E_nu, osc_params)
+    eps_N_val = eps_N(nsi_model, osc_params)
+    f = V_fit(x) * xi_fit(x, nsi_model)
+    fdot = f_dot(x, E_nu, nsi_model, osc_params)
+    delta_cp = osc_params.delta_cp
+
+    matter_term = np.multiply.outer(xi(x, nsi_model) * V_fit(x), eps_N(nsi_model, osc_params))
+    
+    real_part = np.add.outer(matter_term, d_vac * s12_2 * np.cos(delta_cp))
+    imag_part = np.add.outer(matter_term, d_vac * s12_2 * np.sin(delta_cp))
+    
+    
+    return (fdot * eps_N_val / d_vac) * (real_part**2 + imag_part**2)**(-1/2) * (real_part + imag_part)
+
+
+def q_dot(x, E_nu, nsi_model, osc_params):
+    """Derivative of the q parameter."""
+    c13_2 = osc_params.c13 ** 2
+    d_vac = delta_vacuum_energy(E_nu, osc_params)
+    eps_D_val = eps_D(nsi_model, osc_params)
+
+    return (f_dot(x, E_nu, nsi_model, osc_params) * eps_D_val - 0.5 * c13_2 * np.gradient(V_fit(x), x)) / d_vac
+
+
+
 def theta_dot(x, E_nu, nsi_model, osc_params):
-    """Return the derivative of the mixing angle in matter."""
+    """Derivative of the mixing angle in matter."""
+    pval = p(x, E_nu, nsi_model, osc_params)
+    qval = q(x, E_nu, nsi_model, osc_params)
+    pdot = p_dot(x, E_nu, nsi_model, osc_params)
+    qdot = q_dot(x, E_nu, nsi_model, osc_params)
+    
+    # Derivative of 0.5 * arctan(p/q)
+    return 0.5 * (pdot * qval - pval * qdot) / (pval**2 + qval**2)
 
-    result = 0.5 * (p_dot(x, E_nu, nsi_model, osc_params) * q(x, E_nu, nsi_model, osc_params) -
-                    p(x, E_nu, nsi_model, osc_params) * q_dot(x, E_nu, nsi_model, osc_params)) / \
-             (p(x, E_nu, nsi_model, osc_params) **2 + q(x, E_nu, nsi_model, osc_params) ** 2)
 
-    return result
+
+
+"""Now gamma"""
 
 
 def gamma(x, E_nu, nsi_model, osc_params):
-    """Return the general adiabaticity parameter."""
+    """Adiabaticity parameter."""
 
-    return abs(delta_vacuum_energy(E_nu, osc_params) * (p(x, E_nu, nsi_model, osc_params) ** 2 + q(x, E_nu, nsi_model, osc_params) ** 2) ** 1.5 /
-               (p_dot(x, E_nu, nsi_model, osc_params) * q(x, E_nu, nsi_model, osc_params) - p(x, E_nu, nsi_model, osc_params) * q_dot(x, E_nu, nsi_model, osc_params)))
+    R_SUN_meters = 6.957e8
+    R_SUN_GeV = R_SUN_meters * 5.06773e15
+
+    d_vac = delta_vacuum_energy(E_nu, osc_params)
+    pval = p(x, E_nu, nsi_model, osc_params)
+    qval = q(x, E_nu, nsi_model, osc_params)
+    d_mat = delta_matter_energy(x, E_nu, nsi_model, osc_params)    
+    th_dot_x = theta_dot(x, E_nu, nsi_model, osc_params)
+    ch_dot_x = chi_dot(x, E_nu, nsi_model, osc_params)
+    s2m = s12m_2(x, E_nu, nsi_model, osc_params)
+    c2m = c12m_2(x, E_nu, nsi_model, osc_params)
+
+    th_dot = th_dot_x / R_SUN_GeV
+    ch_dot = ch_dot_x / R_SUN_GeV
+    
+    den_plus = 1j * th_dot + 0.5 * s2m * ch_dot
+    den_min =  1j * th_dot - 0.5 * s2m * ch_dot
+
+    if np.all(np.abs(den_plus) >= np.abs(den_min)):
+        den_max = den_plus
+        choice = "plus"
+    else:
+        den_max = den_min
+        choice = "min"
+            
+    return np.abs(0.5 * d_mat - 0.5 * (1-c2m) * ch_dot) / (np.abs(den_max)), choice
+
 
 
 def gamma_min(E_nu, nsi_model, osc_params):
     """Return the minimum value of gamma in the solar interior"""
 
     xs = np.linspace(0., 1., 100)
-    gammas = gamma(xs, E_nu, nsi_model, osc_params)
-    return np.min(gammas)
+    gammas, choice = gamma(xs, E_nu, nsi_model, osc_params)
+    return np.min(gammas), choice
 
 
 def gamma_check(E_nu, nsi_model, osc_params, threshold=100):
