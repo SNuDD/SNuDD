@@ -139,20 +139,78 @@ def delta_vacuum_energy(E_nu, osc_params):
 
 
 
-"""The two fit"""
+"""----------------------The two fit-----------------------"""
+
+def ne_fit(x):
+
+    N_A = 6.02214076e23
+    u = (x / 0.075)**1.1
+    exp_u = np.exp(-u)
+
+    return N_A * 10**(2.36 - 4.52 * x - 0.33 * exp_u) * 7.619e-42 # Conversion cm^-3 -> GeV^3 (approx)
+
+
+def ne_fit_der(x):
+
+    ne = ne_fit(x)
+    u = (x / 0.075)**1.1
+    exp_u = np.exp(-u)
+    ne_prime = -4.52 + 0.33 * (1.1 / 0.075) * np.power(x / 0.075, 0.1) * exp_u
+
+    return ne * np.log(10) * ne_prime
+
 
 def V_fit(x):
 
-    return np.sqrt(2) * config.G_F * 10**(2.36 - 4.52* x - 0.33 * np.exp(-(x/0.075)**1.1))
+    ne = ne_fit(x)
+
+    return np.sqrt(2) * config.G_F * ne
+
+
+def V_fit_der(x):
+
+    ne_d = ne_fit_der(x)
+
+    return np.sqrt(2) * config.G_F * ne_d
+
+
+def nn_fit(x):
+
+    N_A = 6.02214076e23
+
+    return N_A * 10**(1.72-4.80 * x) * 7.619e-42 # Conversion cm^-3 -> GeV^3 (approx)
+
+
+def nn_fit_der(x):
+
+    nn = nn_fit(x)
+
+    return -4.8 * nn * np.log(10)
 
 
 def xi_fit(x, nsi_model):
 
+    ne = ne_fit(x)
+    nn = nn_fit(x)
+
     xi_charge = nsi_model.xi_p + nsi_model.xi_e
 
-    return xi_charge + nsi_model.xi_n * 10**(1.72 - 4*x) / 10**(2.36 - 4.52* x - 0.33 * np.exp(-(x/0.075)**1.1))
+    return xi_charge + nsi_model.xi_n * nn / ne
 
 
+def xi_fit_der(x, nsi_model):
+
+    ne = ne_fit(x)
+    nn = nn_fit(x)
+    ne_d = ne_fit_der(x)
+    nn_d = nn_fit_der(x)
+
+    return nsi_model.xi_n * (nn_d * ne - nn * ne_d / ne**2)
+
+
+
+
+"""----------------------p and q-----------------------"""
 
 
 def p(x, E_nu, nsi_model, osc_params):
@@ -202,6 +260,10 @@ def xi_dot(x, nsi_model):
 
 
 
+
+"""----------------------Angles-----------------------"""
+
+
 def t12m_2(x, E_nu, nsi_model, osc_params):
     """Return the tangent of twice the mixing angle in matter."""
 
@@ -222,7 +284,8 @@ def c12m_2(x, E_nu, nsi_model, osc_params):
 
 
 
-"""Here def of tanchi, tanchi_dot, chi_dot, theta_dot..."""
+
+"""-------Here def of tanchi, tanchi_dot, chi_dot, theta_dot...------"""
 
 
 def tanchi(x, E_nu, nsi_model, osc_params):
@@ -234,10 +297,9 @@ def tanchi(x, E_nu, nsi_model, osc_params):
 
 
 
-
 def f_dot(x, E_nu, nsi_model, osc_params):
 
-    return np.gradient(V_fit(x), x) * xi_fit(x, nsi_model) + V_fit(x) * np.gradient(xi_fit(x, nsi_model), x)
+    return V_fit_der(x) * xi_fit(x, nsi_model) + V_fit(x) * xi_fit_der(x, nsi_model)
 
 
 
@@ -248,6 +310,7 @@ def tanchi_dot(x, E_nu, nsi_model, osc_params):
     return (delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 * f_dot(x, E_nu, nsi_model, osc_params) *  np.sin(osc_params.delta_cp) * 
               eps_N(nsi_model, osc_params)) / (delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 *  np.cos(osc_params.delta_cp) + 
               V_fit(x) * xi_fit(x, nsi_model) * eps_N(nsi_model, osc_params))**2
+
 
 def chi_dot(x, E_nu, nsi_model, osc_params):
 
@@ -281,7 +344,7 @@ def q_dot(x, E_nu, nsi_model, osc_params):
     d_vac = delta_vacuum_energy(E_nu, osc_params)
     eps_D_val = eps_D(nsi_model, osc_params)
 
-    return (f_dot(x, E_nu, nsi_model, osc_params) * eps_D_val - 0.5 * c13_2 * np.gradient(V_fit(x), x)) / d_vac
+    return (f_dot(x, E_nu, nsi_model, osc_params) * eps_D_val - 0.5 * c13_2 * V_fit_der(x)) / d_vac
 
 
 
@@ -298,7 +361,7 @@ def theta_dot(x, E_nu, nsi_model, osc_params):
 
 
 
-"""Now gamma"""
+"""----------------------Gamma-----------------------"""
 
 
 def gamma(x, E_nu, nsi_model, osc_params):
