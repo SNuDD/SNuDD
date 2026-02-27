@@ -48,12 +48,13 @@ def azimuth(t):
 
 
 def zenith(times, thetas, th_det):
-    """Returns the solar neutrino zenith angle (taken from below the horizon) 
+    """Returns the solar neutrino zenith angle (taken with respect to the vertical z-axis) 
     for a given time series (in years) with corresponding true anomalies (thetas) at detector latitude (th_det)"""
     nu_dot_n = np.cos(thetas) * (np.cos(th_eccl)*np.sin(th_det)*np.cos(azimuth(times)) + np.sin(th_eccl)*np.cos(th_det)) + \
                np.sin(thetas) * np.sin(th_det)*np.sin(azimuth(times))
     
-    return np.pi/2 - np.arccos(nu_dot_n)
+    # return np.pi/2 - np.arccos(nu_dot_n)
+    return np.arccos(nu_dot_n)
 
 
 
