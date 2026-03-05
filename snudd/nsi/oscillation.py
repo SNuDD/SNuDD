@@ -310,41 +310,9 @@ def theta_dot(x, E_nu, nsi_model, osc_params):
 """----------------------Gamma-----------------------"""
 
 
-def gammaa(x, E_nu, nsi_model, osc_params):
-    """Adiabaticity parameter."""
-
-    R_SUN_meters = 6.957e8
-    R_SUN_GeV = R_SUN_meters * 5.06773e15
-
-    d_vac = delta_vacuum_energy(E_nu, osc_params)
-    pval = p(x, E_nu, nsi_model, osc_params)
-    qval = q(x, E_nu, nsi_model, osc_params)
-    d_mat = d_vac * np.sqrt(pval**2 + qval**2)  
-    th_dot = theta_dot(x, E_nu, nsi_model, osc_params)
-    ch_dot = chi_dot(x, E_nu, nsi_model, osc_params)
-    s2m = s12m_2(x, E_nu, nsi_model, osc_params)
-    c2m = c12m_2(x, E_nu, nsi_model, osc_params)
-    
-    den_plus = 1j * th_dot + 0.5 * s2m * ch_dot
-    den_min =  1j * th_dot - 0.5 * s2m * ch_dot
-
-    if np.all(np.abs(den_plus) >= np.abs(den_min)):
-        den_max = den_plus
-        choice = "plus"
-    else:
-        den_max = den_min
-        choice = "min"
-    
-    numerator = d_vac * (pval**2 + qval**2)
-    denominator = (p_dot(x, E_nu, nsi_model, osc_params) * qval - pval * q_dot(x, E_nu, nsi_model, osc_params))
-
-    return np.abs(numerator / denominator), "test"        
-
-    #return np.abs(d_mat - (1 - c2m) * ch_dot) / (2 * np.abs(den_max)), choice
-
-
 
 def gamma(x, E_nu, nsi_model, osc_params):
+
     d_mat = delta_matter_energy(x, E_nu, nsi_model, osc_params)    
     th_dot = theta_dot(x, E_nu, nsi_model, osc_params)
     ch_dot = chi_dot(x, E_nu, nsi_model, osc_params)
