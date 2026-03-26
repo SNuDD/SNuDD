@@ -221,9 +221,13 @@ def c12m_2(x, E_nu, nsi_model, osc_params):
 
 
 """-------Here def of tanchi, tanchi_dot, chi_dot, theta_dot...------"""
+# NOTE: Need some clarifications here
+# What is the difference between p_dot and p_dott?
+# What is f/f_dot?
 
 
 def tanchi(x, E_nu, nsi_model, osc_params):
+    """The tan of the effective matter mixing phase due to CP and/or complex NSI"""
 
     sin_2theta12 = 2 * osc_params.s12 * osc_params.c12
 
