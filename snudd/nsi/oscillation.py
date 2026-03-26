@@ -77,6 +77,31 @@ class OscillationParameters:
 
 
 
+def UPMNS(osc_params):
+    """Return the PMNS mixing matrix."""
+
+    c12 = osc_params.c12
+    s12 = osc_params.s12
+    c13 = osc_params.c13
+    s13 = osc_params.s13
+    c23 = osc_params.c23
+    s23 = osc_params.s23
+    delta_cp = osc_params.delta_cp
+
+    U = np.array([[c12 * c13,
+                   s12 * c13,
+                   s13 * np.exp(-1j * delta_cp)],
+                  [-s12 * c23 - c12 * s23 * s13 * np.exp(1j * delta_cp),
+                   c12 * c23 - s12 * s23 * s13 * np.exp(1j * delta_cp),
+                   s23 * c13],
+                  [s12 * s23 - c12 * c23 * s13 * np.exp(1j * delta_cp),
+                   -c12 * s23 - s12 * c23 * s13 * np.exp(1j * delta_cp),
+                   c23 * c13]], dtype=np.complex128)
+
+    return U
+
+
+
 def eps_D(nsi_model, osc_params):
     """The eps_D parameter, found after performing the 3x3 -> 2x2 rotation."""
 
@@ -161,6 +186,7 @@ def xi_dot(x, nsi_model):
 
 
 def p(x, E_nu, nsi_model, osc_params):
+    """Return our defined p parameter."""
 
     s12_2 = osc_params.s12_2
     delta_cp = osc_params.delta_cp
@@ -179,7 +205,7 @@ def p(x, E_nu, nsi_model, osc_params):
 
 
 def q(x, E_nu, nsi_model, osc_params):
-    """Return our defined p parameter."""
+    """Return our defined q parameter."""
 
     c12_2 = osc_params.c12_2
 
@@ -221,9 +247,6 @@ def c12m_2(x, E_nu, nsi_model, osc_params):
 
 
 """-------Here def of tanchi, tanchi_dot, chi_dot, theta_dot...------"""
-# NOTE: Need some clarifications here
-# What is the difference between p_dot and p_dott?
-# What is f/f_dot?
 
 
 def tanchi(x, E_nu, nsi_model, osc_params):
@@ -235,8 +258,8 @@ def tanchi(x, E_nu, nsi_model, osc_params):
                 sin_2theta12 * np.cos(osc_params.delta_cp) + np.multiply.outer(xi(x, nsi_model) * potential_cc(x), eps_N(nsi_model, osc_params)))
 
 
-
-def f_dot(x, E_nu, nsi_model, osc_params):
+# What if f/f_dot?
+def f_dot(x, nsi_model):
 
     return potential_cc_dot(x) * xi(x, nsi_model) + potential_cc(x) * xi_dot(x, nsi_model)
 
@@ -246,7 +269,7 @@ def tanchi_dot(x, E_nu, nsi_model, osc_params):
 
     sin_2theta12 = 2 * osc_params.s12 * osc_params.c12
 
-    return (0.5*delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 * f_dot(x, E_nu, nsi_model, osc_params) *  np.sin(osc_params.delta_cp) * 
+    return (0.5*delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 * f_dot(x, nsi_model) *  np.sin(osc_params.delta_cp) * 
               eps_N(nsi_model, osc_params)) / (0.5*delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 *  np.cos(osc_params.delta_cp) + 
               potential_cc(x) * xi(x, nsi_model) * eps_N(nsi_model, osc_params))**2
 
@@ -257,49 +280,30 @@ def chi_dot(x, E_nu, nsi_model, osc_params):
 
 
 
-def p_dott(x, E_nu, nsi_model, osc_params):
-    """Derivative of the p parameter with respect to solar radius x."""
-
-    p_val = p(x, E_nu, nsi_model, osc_params)
-    s12_2 = 2 * osc_params.s12 * osc_params.c12
-    d_vac = delta_vacuum_energy(E_nu, osc_params)
-    eps_N_val = eps_N(nsi_model, osc_params)
-    f = potential_cc(x) * xi(x, nsi_model)
-    fdot = f_dot(x, E_nu, nsi_model, osc_params)
-    delta_cp = osc_params.delta_cp
-
-    matter_ratio = np.multiply.outer(2 * xi(x, nsi_model) * potential_cc(x) * eps_N_val, 1/d_vac)
-    
-    real_part = s12_2 * np.cos(delta_cp) + matter_ratio
-    imag_part = s12_2 * np.sin(delta_cp)
-    
-    if delta_cp == 0:
-        
-        return np.squeeze(2*eps_N_val*fdot/d_vac)
-
-    return (fdot * eps_N_val / d_vac) * (real_part**2 + imag_part**2)**(-1/2) * (real_part)
-
 def p_dot(x, E_nu, nsi_model, osc_params):
+    """Derivative of the p parameter."""
 
     d_vac = delta_vacuum_energy(E_nu, osc_params)
     eps_N_val = eps_N(nsi_model, osc_params)
-    fdot = f_dot(x, E_nu, nsi_model, osc_params)
+    fdot = f_dot(x, nsi_model)
 
     return 2 * eps_N_val * fdot / d_vac
 
 
 def q_dot(x, E_nu, nsi_model, osc_params):
     """Derivative of the q parameter."""
+
     c13_2 = osc_params.c13 ** 2
     d_vac = delta_vacuum_energy(E_nu, osc_params)
     eps_D_val = eps_D(nsi_model, osc_params)
 
-    return (2*f_dot(x, E_nu, nsi_model, osc_params) * eps_D_val - c13_2 * potential_cc_dot(x)) / d_vac
+    return (2*f_dot(x, nsi_model) * eps_D_val - c13_2 * potential_cc_dot(x)) / d_vac
 
 
 
 def theta_dot(x, E_nu, nsi_model, osc_params):
     """Derivative of the mixing angle in matter."""
+
     pval = p(x, E_nu, nsi_model, osc_params)
     qval = q(x, E_nu, nsi_model, osc_params)
     pdot = p_dot(x, E_nu, nsi_model, osc_params)
@@ -311,11 +315,12 @@ def theta_dot(x, E_nu, nsi_model, osc_params):
 
 
 
-"""----------------------Gamma-----------------------"""
+"""----------------------Gamma (Adiabaticity)-----------------------"""
 
 
 
 def gamma(x, E_nu, nsi_model, osc_params):
+    """Adiabaticty parameter in the Sun."""
 
     d_mat = delta_matter_energy(x, E_nu, nsi_model, osc_params)    
     th_dot = theta_dot(x, E_nu, nsi_model, osc_params)
@@ -349,38 +354,37 @@ def gamma_check(E_nu, nsi_model, osc_params, threshold=100):
 
 
 
-def UPMNS(osc_params):
-    """Return the PMNS mixing matrix."""
 
-    c12 = osc_params.c12
-    s12 = osc_params.s12
-    c13 = osc_params.c13
-    s13 = osc_params.s13
-    c23 = osc_params.c23
-    s23 = osc_params.s23
-    delta_cp = osc_params.delta_cp
 
-    U = np.array([[c12 * c13,
-                   s12 * c13,
-                   s13 * np.exp(-1j * delta_cp)],
-                  [-s12 * c23 - c12 * s23 * s13 * np.exp(1j * delta_cp),
-                   c12 * c23 - s12 * s23 * s13 * np.exp(1j * delta_cp),
-                   s23 * c13],
-                  [s12 * s23 - c12 * c23 * s13 * np.exp(1j * delta_cp),
-                   -c12 * s23 - s12 * c23 * s13 * np.exp(1j * delta_cp),
-                   c23 * c13]], dtype=np.complex128)
-
-    return U
+"""----------------------Default oscillation parameters-----------------------"""
 
 
 
-# OSC VALS FROM 2006.11237
-delta_m12 = 7.50e-5 * (1e-9) ** 2  # GeV^2
-delta_m31 = 2.517e-3 *( 1e-9) ** 2 # GeV^2
-theta_12 = 34.3 * np.pi / 180
-theta_13 = 8.58 * np.pi / 180  # NORMAL ORDERING
-theta_23 = 49.26 * np.pi / 180
-delta_cp = 0.0  # CP angle
+
+# OLD osc vals from 2006.11237
+delta_m12_old = 7.50e-5 * (1e-9) ** 2  # GeV^2
+delta_m31_old = 2.517e-3 *( 1e-9) ** 2 # GeV^2
+theta_12_old  = 34.3 * np.pi / 180
+theta_13_old  = 8.58 * np.pi / 180  # NORMAL ORDERING
+theta_23_old  = 49.26 * np.pi / 180
+delta_cp_old  = 0.0  # CP angle
+
+osc_params_old = OscillationParameters(delta_m12_old,
+                                        delta_m31_old,
+                                        theta_12_old,
+                                        theta_13_old,
+                                        theta_23_old,
+                                        delta_cp_old)
+
+
+# UPDATED osc vals from 2410.05380 (IC24 w/ SK)
+delta_m12 = 7.49e-5 * (1e-9) ** 2  # GeV^2
+delta_m31 = 2.513e-3 *( 1e-9) ** 2
+theta_12  = 33.68 * np.pi / 180
+theta_13  = 8.56 * np.pi / 180  # NORMAL ORDERING
+theta_23  = 43.3 * np.pi / 180
+delta_cp  = 212  * np.pi / 180  # CP angle
+
 
 osc_params_best = OscillationParameters(delta_m12,
                                         delta_m31,
