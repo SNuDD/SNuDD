@@ -88,15 +88,26 @@ def UPMNS(osc_params):
     s23 = osc_params.s23
     delta_cp = osc_params.delta_cp
 
+
     U = np.array([[c12 * c13,
-                   s12 * c13,
-                   s13 * np.exp(-1j * delta_cp)],
-                  [-s12 * c23 - c12 * s23 * s13 * np.exp(1j * delta_cp),
+                   s12 * c13 * np.exp(1j * delta_cp),
+                   s13],
+                  [-np.exp(-1j * delta_cp) * s12 * c23 - c12 * s23 * s13,
                    c12 * c23 - s12 * s23 * s13 * np.exp(1j * delta_cp),
                    s23 * c13],
-                  [s12 * s23 - c12 * c23 * s13 * np.exp(1j * delta_cp),
+                  [np.exp(-1j * delta_cp) * s12 * s23 - c12 * c23 * s13,
                    -c12 * s23 - s12 * c23 * s13 * np.exp(1j * delta_cp),
                    c23 * c13]], dtype=np.complex128)
+
+    # U = np.array([[c12 * c13,
+    #                s12 * c13,
+    #                s13 * np.exp(-1j * delta_cp)],
+    #               [-s12 * c23 - c12 * s23 * s13 * np.exp(1j * delta_cp),
+    #                c12 * c23 - s12 * s23 * s13 * np.exp(1j * delta_cp),
+    #                s23 * c13],
+    #               [s12 * s23 - c12 * c23 * s13 * np.exp(1j * delta_cp),
+    #                -c12 * s23 - s12 * c23 * s13 * np.exp(1j * delta_cp),
+    #                c23 * c13]], dtype=np.complex128)
 
     return U
 
