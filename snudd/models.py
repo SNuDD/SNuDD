@@ -62,6 +62,7 @@ class GeneralNSI(Model):
     """A general NSI model, which takes a matrix of NSI couplings and angles."""
 
     def __init__(self, eps_matrix, eta, phi):
+        # In general, eps_matrix is a 3x3 array of complex numbers (the NSI magnitudes)
         self.eps_matrix = eps_matrix
         self.eta = eta
         self.phi = phi

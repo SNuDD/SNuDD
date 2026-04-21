@@ -162,7 +162,7 @@ class DensityMatrixCalculator(ProbabilityCalculator):
         """
 
         # Shorthands for matter mixing quantities
-        cos2m_av  = self._cos_matter_average(E_nus, nu) # Average of cos(2 theta)
+        cos2m_av  = self._cos_matter_average(E_nus, nu) # Average of cos(2 theta)!!!!!
         cosm_avsq = (1+cos2m_av) / 2.   # <cos^2(theta)>
         s13       = self.osc_params.s13
         c13       = self.osc_params.c13

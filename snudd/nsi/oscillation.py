@@ -9,7 +9,7 @@ from snudd.nsi import solar_profiles
 
 @dataclass
 class OscillationParameters:
-    """Dataclass to holding oscillation parameters"""
+    """Dataclass holding the SM neutrino oscillation parameters"""
 
     delta_m12: float
     delta_m31: float 
@@ -116,19 +116,23 @@ def UPMNS(osc_params):
 def eps_D(nsi_model, osc_params):
     """The eps_D parameter, found after performing the 3x3 -> 2x2 rotation."""
 
+    # This is in general a 3x3 array of complex numbers
     eps_matrix = nsi_model.eps_matrix
 
-    eps_ee = eps_matrix[0][0]
-    eps_mumu = eps_matrix[1][1]
+    eps_ee     = eps_matrix[0][0]
+    eps_mumu   = eps_matrix[1][1]
     eps_tautau = eps_matrix[2][2]
-    eps_emu = eps_matrix[0][1]
-    eps_etau = eps_matrix[0][2]
-    eps_mutau = eps_matrix[1][2]
+    eps_emu    = eps_matrix[0][1]
+    eps_etau   = eps_matrix[0][2]
+    eps_mutau  = eps_matrix[1][2]
 
     c13, s13, c23, s23 = osc_params.c13, osc_params.s13, osc_params.c23, osc_params.s23
 
-    result = c13 * s13 * (s23 * eps_emu + c23 * eps_etau) - \
-             (1 + s13 ** 2) * c23 * s23 * eps_mutau - \
+    # Complex combination of NSI
+    compln = s23 * eps_emu + c23 * eps_etau
+
+    result = c13 * s13 * compln.real - \
+             (1 + s13 ** 2) * c23 * s23 * eps_mutau.real - \
              0.5 * c13 ** 2 * (eps_ee - eps_mumu) + \
              0.5 * (s23 ** 2 - s13 ** 2 * c23 ** 2) * (eps_tautau - eps_mumu)
 
@@ -138,18 +142,19 @@ def eps_D(nsi_model, osc_params):
 def eps_N(nsi_model, osc_params):
     """The eps_N parameter."""
 
+    # This is in general a 3x3 array of complex numbers
     eps_matrix = nsi_model.eps_matrix
 
-    eps_mumu = eps_matrix[1][1]
+    eps_mumu   = eps_matrix[1][1]
     eps_tautau = eps_matrix[2][2]
-    eps_emu = eps_matrix[0][1]
-    eps_etau = eps_matrix[0][2]
-    eps_mutau = eps_matrix[1][2]
+    eps_emu    = eps_matrix[0][1]
+    eps_etau   = eps_matrix[0][2]
+    eps_mutau  = eps_matrix[1][2]
 
     c13, s13, c23, s23 = osc_params.c13, osc_params.s13, osc_params.c23, osc_params.s23
 
     result = c13 * (c23 * eps_emu - s23 * eps_etau) + \
-             s13 * (s23 ** 2 * eps_mutau - c23 ** 2 * eps_mutau + c23 * s23 * (eps_tautau - eps_mumu))
+             s13 * (s23 ** 2 * eps_mutau - c23 ** 2 * eps_mutau.conjugate() + c23 * s23 * (eps_tautau - eps_mumu))
 
     return result
 
@@ -199,14 +204,15 @@ def xi_dot(x, nsi_model):
 def p(x, E_nu, nsi_model, osc_params):
     """Return our defined p parameter."""
 
-    s12_2 = osc_params.s12_2
+    s12_2    = osc_params.s12_2
     delta_cp = osc_params.delta_cp
-    d_vac = delta_vacuum_energy(E_nu, osc_params)
+    d_vac    = delta_vacuum_energy(E_nu, osc_params) / 2 # Match the definition in Valeria's notes
     
-    matter_ratio = np.multiply.outer(2 * xi(x, nsi_model) * potential_cc(x) * eps_N(nsi_model, osc_params), 1/d_vac)
+    matter_ratio_real = np.multiply.outer(potential_cc(x) * xi(x, nsi_model) * eps_N(nsi_model, osc_params).real, 1/d_vac)
+    matter_ratio_imag = np.multiply.outer(potential_cc(x) * xi(x, nsi_model) * eps_N(nsi_model, osc_params).imag, 1/d_vac)
     
-    real_p = s12_2 * np.cos(delta_cp) + matter_ratio
-    imag_p = s12_2 * np.sin(delta_cp)
+    real_p = s12_2 * np.cos(delta_cp) + matter_ratio_real
+    imag_p = s12_2 * np.sin(delta_cp) + matter_ratio_imag
     
     if delta_cp == 0:
 
@@ -220,8 +226,8 @@ def q(x, E_nu, nsi_model, osc_params):
 
     c12_2 = osc_params.c12_2
 
-    return np.squeeze(c12_2 + np.multiply.outer((2 * xi(x, nsi_model) * eps_D(nsi_model, osc_params) - osc_params.c13 ** 2) *
-                            potential_cc(x), 1 / delta_vacuum_energy(E_nu, osc_params)))
+    return np.squeeze(c12_2 + np.multiply.outer((xi(x, nsi_model) * eps_D(nsi_model, osc_params) - 0.5 * osc_params.c13 ** 2) *
+                            potential_cc(x), 1 / (delta_vacuum_energy(E_nu, osc_params) / 2)))
 
 
 
@@ -263,26 +269,49 @@ def c12m_2(x, E_nu, nsi_model, osc_params):
 def tanchi(x, E_nu, nsi_model, osc_params):
     """The tan of the effective matter mixing phase due to CP and/or complex NSI"""
 
-    sin_2theta12 = 2 * osc_params.s12 * osc_params.c12
+    sin_2theta12 = osc_params.s12_2
+    d_vac = delta_vacuum_energy(E_nu, osc_params) / 2
 
-    return - (0.5*delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 * np.sin(osc_params.delta_cp)) / (0.5*delta_vacuum_energy(E_nu, osc_params) * 
-                sin_2theta12 * np.cos(osc_params.delta_cp) + np.multiply.outer(xi(x, nsi_model) * potential_cc(x), eps_N(nsi_model, osc_params)))
+    epsN     = eps_N(nsi_model, osc_params)
+    matt_vec = xi(x, nsi_model) * potential_cc(x)
+
+    matter_real =  np.multiply.outer(matt_vec, epsN.real)
+    matter_imag =  np.multiply.outer(matt_vec, epsN.imag)
+
+    return - (d_vac * sin_2theta12 * np.sin(osc_params.delta_cp) + matter_imag) \
+           / (d_vac * sin_2theta12 * np.cos(osc_params.delta_cp) + matter_real)
 
 
-# What if f/f_dot?
 def f_dot(x, nsi_model):
+    """Derivative of the combination f(x) = V(x) xi(x)"""
 
     return potential_cc_dot(x) * xi(x, nsi_model) + potential_cc(x) * xi_dot(x, nsi_model)
 
 
+# NOTE: ****** THIS NEEDS TO BE RECOMPUTED FOR COMPLEX NSI ********
+# def tanchi_dot(x, E_nu, nsi_model, osc_params):
+
+#     sin_2theta12 = 2 * osc_params.s12 * osc_params.c12
+
+#     return (0.5*delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 * f_dot(x, nsi_model) *  np.sin(osc_params.delta_cp) * 
+#               eps_N(nsi_model, osc_params)) / (0.5*delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 *  np.cos(osc_params.delta_cp) + 
+#               potential_cc(x) * xi(x, nsi_model) * eps_N(nsi_model, osc_params))**2
 
 def tanchi_dot(x, E_nu, nsi_model, osc_params):
 
-    sin_2theta12 = 2 * osc_params.s12 * osc_params.c12
+    d_vac    = delta_vacuum_energy(E_nu, osc_params) / 2
+    epsN     = eps_N(nsi_model, osc_params)
+    fdot     = f_dot(x, nsi_model)
+    s12_2    = osc_params.s12_2
+    delta_cp = osc_params.delta_cp
 
-    return (0.5*delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 * f_dot(x, nsi_model) *  np.sin(osc_params.delta_cp) * 
-              eps_N(nsi_model, osc_params)) / (0.5*delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 *  np.cos(osc_params.delta_cp) + 
-              potential_cc(x) * xi(x, nsi_model) * eps_N(nsi_model, osc_params))**2
+    matter_real = np.multiply.outer(xi(x, nsi_model) * potential_cc(x) * epsN.real, 1/d_vac)
+    matter_imag = np.multiply.outer(xi(x, nsi_model) * potential_cc(x) * epsN.imag, 1/d_vac)
+
+    A = s12_2*np.cos(delta_cp) + matter_real
+    B = s12_2*np.sin(delta_cp) + matter_imag
+
+    return fdot/(d_vac*A**2) * (B*epsN.real-A*epsN.imag)
 
 
 def chi_dot(x, E_nu, nsi_model, osc_params):
@@ -290,15 +319,37 @@ def chi_dot(x, E_nu, nsi_model, osc_params):
     return np.cos(np.arctan(tanchi(x, E_nu, nsi_model, osc_params)))**2 * tanchi_dot(x, E_nu, nsi_model, osc_params)
 
 
+# NOTE: ****** THIS NEEDS TO BE RECOMPUTED FOR COMPLEX NSI ********
+# def p_dot(x, E_nu, nsi_model, osc_params):
+#     """Derivative of the p parameter."""
+
+#     d_vac = delta_vacuum_energy(E_nu, osc_params)
+#     eps_N_val = eps_N(nsi_model, osc_params)
+#     fdot = f_dot(x, nsi_model)
+
+#     return 2 * eps_N_val * fdot / d_vac
+
 
 def p_dot(x, E_nu, nsi_model, osc_params):
     """Derivative of the p parameter."""
 
-    d_vac = delta_vacuum_energy(E_nu, osc_params)
-    eps_N_val = eps_N(nsi_model, osc_params)
-    fdot = f_dot(x, nsi_model)
+    d_vac    = delta_vacuum_energy(E_nu, osc_params) / 2
+    epsN     = eps_N(nsi_model, osc_params)
+    fdot     = f_dot(x, nsi_model)
+    s12_2    = osc_params.s12_2
+    delta_cp = osc_params.delta_cp
 
-    return 2 * eps_N_val * fdot / d_vac
+    matter_real = np.multiply.outer(xi(x, nsi_model) * potential_cc(x) * epsN.real, 1/d_vac)
+    matter_imag = np.multiply.outer(xi(x, nsi_model) * potential_cc(x) * epsN.imag, 1/d_vac)
+
+    A = s12_2*np.cos(delta_cp) + matter_real
+    B = s12_2*np.sin(delta_cp) + matter_imag
+
+    if delta_cp == 0:
+        
+        return np.squeeze(2*epsN*fdot/d_vac)
+
+    return fdot/delta_cp * (A*epsN.real+B*epsN.imag) / np.sqrt(A**2 + B**2)
 
 
 def q_dot(x, E_nu, nsi_model, osc_params):
@@ -333,15 +384,15 @@ def theta_dot(x, E_nu, nsi_model, osc_params):
 def gamma(x, E_nu, nsi_model, osc_params):
     """Adiabaticty parameter in the Sun."""
 
-    d_mat = delta_matter_energy(x, E_nu, nsi_model, osc_params)    
+    d_mat  = delta_matter_energy(x, E_nu, nsi_model, osc_params)    
     th_dot = theta_dot(x, E_nu, nsi_model, osc_params)
     ch_dot = chi_dot(x, E_nu, nsi_model, osc_params)
-    c2m = c12m_2(x, E_nu, nsi_model, osc_params)
-    s2m = s12m_2(x, E_nu, nsi_model, osc_params)
+    c2m    = c12m_2(x, E_nu, nsi_model, osc_params)
+    s2m    = s12m_2(x, E_nu, nsi_model, osc_params)
     
     den_plus = 1j * th_dot + 0.5 * s2m * ch_dot
-    den_min =  1j * th_dot - 0.5 * s2m * ch_dot
-    den_max = den_plus if np.all(np.abs(den_plus) >= np.abs(den_min)) else den_min
+    den_min  = 1j * th_dot - 0.5 * s2m * ch_dot
+    den_max  = den_plus if np.all(np.abs(den_plus) >= np.abs(den_min)) else den_min
     
     return np.abs(d_mat - 0.5 * (1-c2m) * ch_dot) / (2 * np.abs(den_max)), "plus" if den_max is den_plus else "min"
 
