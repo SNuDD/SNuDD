@@ -1,0 +1,29 @@
+#: table_doi: 10.17182/hepdata.167350.v2/t4
+#: name: Efficiency
+#: description: Data selection efficiency as a function of nuclear recoil energy
+#: data_file: NR_detectionEfficiency_8BLMW_data.yaml
+#: keyword observables: efficiency
+#: keyword phrases: Xe nuclear recoil
+Nuclear Recoil Energy [keV],Efficiency
+0.0,0.0
+0.5025,0.0001574
+1.005,0.008258
+1.508,0.03509
+2.01,0.08084
+2.513,0.1236
+3.015,0.1378
+3.518,0.13
+4.02,0.1002
+4.523,0.06872
+5.025,0.04107
+5.528,0.0268
+6.03,0.01364
+6.533,0.006497
+7.035,0.003513
+7.538,0.001606
+8.04,0.0007991
+8.543,0.0002879
+9.045,0.0001075
+9.548,2.48e-05
+10.05,0.0
+
