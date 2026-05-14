@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 import numpy as np
-from scipy.optimize import root_scalar
 from snudd import config
 from snudd.nsi import solar_profiles
 
@@ -98,16 +97,6 @@ def UPMNS(osc_params):
                   [np.exp(-1j * delta_cp) * s12 * s23 - c12 * c23 * s13,
                    -c12 * s23 - s12 * c23 * s13 * np.exp(1j * delta_cp),
                    c23 * c13]], dtype=np.complex128)
-
-    # U = np.array([[c12 * c13,
-    #                s12 * c13,
-    #                s13 * np.exp(-1j * delta_cp)],
-    #               [-s12 * c23 - c12 * s23 * s13 * np.exp(1j * delta_cp),
-    #                c12 * c23 - s12 * s23 * s13 * np.exp(1j * delta_cp),
-    #                s23 * c13],
-    #               [s12 * s23 - c12 * c23 * s13 * np.exp(1j * delta_cp),
-    #                -c12 * s23 - s12 * c23 * s13 * np.exp(1j * delta_cp),
-    #                c23 * c13]], dtype=np.complex128)
 
     return U
 
@@ -288,15 +277,6 @@ def f_dot(x, nsi_model):
     return potential_cc_dot(x) * xi(x, nsi_model) + potential_cc(x) * xi_dot(x, nsi_model)
 
 
-# NOTE: ****** THIS NEEDS TO BE RECOMPUTED FOR COMPLEX NSI ********
-# def tanchi_dot(x, E_nu, nsi_model, osc_params):
-
-#     sin_2theta12 = 2 * osc_params.s12 * osc_params.c12
-
-#     return (0.5*delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 * f_dot(x, nsi_model) *  np.sin(osc_params.delta_cp) * 
-#               eps_N(nsi_model, osc_params)) / (0.5*delta_vacuum_energy(E_nu, osc_params) * sin_2theta12 *  np.cos(osc_params.delta_cp) + 
-#               potential_cc(x) * xi(x, nsi_model) * eps_N(nsi_model, osc_params))**2
-
 def tanchi_dot(x, E_nu, nsi_model, osc_params):
 
     d_vac    = delta_vacuum_energy(E_nu, osc_params) / 2
@@ -318,16 +298,6 @@ def chi_dot(x, E_nu, nsi_model, osc_params):
 
     return np.cos(np.arctan(tanchi(x, E_nu, nsi_model, osc_params)))**2 * tanchi_dot(x, E_nu, nsi_model, osc_params)
 
-
-# NOTE: ****** THIS NEEDS TO BE RECOMPUTED FOR COMPLEX NSI ********
-# def p_dot(x, E_nu, nsi_model, osc_params):
-#     """Derivative of the p parameter."""
-
-#     d_vac = delta_vacuum_energy(E_nu, osc_params)
-#     eps_N_val = eps_N(nsi_model, osc_params)
-#     fdot = f_dot(x, nsi_model)
-
-#     return 2 * eps_N_val * fdot / d_vac
 
 
 def p_dot(x, E_nu, nsi_model, osc_params):

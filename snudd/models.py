@@ -8,9 +8,55 @@ from abc import ABC, abstractmethod
 
 import snudd.config as config
 
-
 if typing.TYPE_CHECKING:
     from snudd.targets import Nucleus, Electron
+
+
+
+
+
+
+
+
+#-------------------------- Helper functions ----------------------------------
+
+
+
+
+
+
+
+def _nuclear_prefactor(nucleus, E_R, E_nu):
+    """Return commonly used nuclear model prefactor."""
+    F_helm = nucleus.form_factor(E_R)
+    return config.G_F ** 2 / np.pi * nucleus.mass * (
+            1 - nucleus.mass * E_R / (2 * E_nu ** 2)) * F_helm ** 2
+
+
+
+def _is_hermitian_3x3(eps_mat):
+    """Checks whether the NSI matrix is a heritian 3x3 matrix."""
+
+    A   = np.asarray(eps_mat)
+    tol = 1e-10                # numerical tolerance
+
+    # Check shape
+    if A.shape != (3, 3):
+        return False, "3x3"
+
+    # Check hermiticity: A == A^\dagger 
+    return np.allclose(A, A.conj().T, atol=tol), "hermitian"
+
+
+
+
+
+
+#-------------------------- Model classes ----------------------------------
+
+
+
+
 
 
 class Model(ABC):
@@ -27,33 +73,6 @@ class Model(ABC):
         pass
 
 
-class SM(Model):
-    """The standard model neutrino scattering behaviour."""
-
-    def nucleus_cross_section_flavour(self, nucleus, E_R, E_nu):
-        """Return flavour-breakdown cross section for nucleus. Energy in GeV."""
-        Q_nu_N = nucleus.Q_nu_N
-
-        prefac = _nuclear_prefactor(nucleus, E_R, E_nu)
-        cs_SM  = Q_nu_N ** 2 / 4
-
-        return prefac * np.array([cs_SM , cs_SM , cs_SM])  # np array in order to work with vectorized function
-
-
-    def electron_cross_section_flavour(self, electron, E_R, E_nu):
-        """Return cross section for target by flavour. Energies in GeV."""
-        m_e = config.m_e
-        g_L = config.g_L
-        g_R = config.g_R
-        y   = E_R / E_nu
-
-        prefactor = 2 * config.G_F ** 2 * config.m_e / np.pi
-
-        cs_e   = (1 + g_L) ** 2 + g_R ** 2 * (1 - y) ** 2 - (1 + g_L) * g_R * (m_e * y / E_nu)
-        cs_mu  = g_L ** 2 + g_R ** 2 * (1 - y) ** 2 - g_L * g_R * m_e * y / E_nu
-        cs_tau = cs_mu
-
-        return prefactor * np.array([cs_e, cs_mu, cs_tau])  # np array in order to work with vectorized function
 
 
 
@@ -152,23 +171,13 @@ Code will run, but results may be unphysical!
         return prefactor * (Lterm + Rterm - LRterm)
 
         
-def _nuclear_prefactor(nucleus, E_R, E_nu):
-    """Return commonly used nuclear model prefactor."""
-    F_helm = nucleus.form_factor(E_R)
-    return config.G_F ** 2 / np.pi * nucleus.mass * (
-            1 - nucleus.mass * E_R / (2 * E_nu ** 2)) * F_helm ** 2
 
 
 
-def _is_hermitian_3x3(eps_mat):
-    """Checks whether the NSI matrix is a heritian 3x3 matrix."""
 
-    A   = np.asarray(eps_mat)
-    tol = 1e-10                # numerical tolerance
+class SM(GeneralNSI):
+    """Wrapper class for the Standard Model neutrino scattering behaviour."""
 
-    # Check shape
-    if A.shape != (3, 3):
-        return False, "3x3"
-
-    # Check hermiticity: A == A^\dagger 
-    return np.allclose(A, A.conj().T, atol=tol), "hermitian"
+    def __init__(self):
+        eps_zero = np.zeros((3,3))
+        super().__init__(eps_zero, 0, 0)
