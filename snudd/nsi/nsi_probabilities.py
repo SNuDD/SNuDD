@@ -191,6 +191,39 @@ class DensityMatrixCalculator(ProbabilityCalculator):
         
     
         return rho
+    
+
+
+
+
+
+class DensityMatrixEarthCalculator():
+    """Class to calculate the evolution of the density matrix through the Earth matter using the PREM model."""
+
+    def __init__(self, 
+                 model, 
+                 nu_density_elements, 
+                 earth_model=em.PREMmodel, 
+                 osc_params=osc.osc_params_best):
+        self.model = model
+        self.nu_density_elements = nu_density_elements
+        self.earth_model = earth_model
+        self.osc_params = osc_params
+        self.earth_propagator = em.EarthProbEvolve(model=self.model, 
+                                      earthmodel=self.earth_model, 
+                                      Nst=50, 
+                                      Nav=50,
+                                      osc_params=self.osc_params)
+    
+    def evolve_earth(self, E_nus, nu: str, ceta):
+        """Evolve the density matrix through the Earth matter using the PREM model and return the final density matrix at the detector.
+        """
+        density_elements = self.nu_density_elements[nu]
+        rho_earthceta = self.earth_propagator.evolve_rhosolar(density_elements, E_nus, ceta)
+
+
+
+
 
 
 sm = models.GeneralNSI(np.zeros((3, 3)), 0, 0)

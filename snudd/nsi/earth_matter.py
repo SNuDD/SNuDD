@@ -180,30 +180,12 @@ class EarthProbEvolve:
 
         return rho_earth 
         
-class DensityMatrixEarthCalculator():
 
-    def __init__(self, 
-                 model, 
-                 nu_density_elements, 
-                 earth_model=em.PREMmodel, 
-                 osc_params=osc.osc_params_best):
-        self.model = model
-        self.nu_density_elements = nu_density_elements
-        self.earth_model = earth_model
-        self.osc_params = osc_params
-        self.earth_propagator = em.EarthProbEvolve(model=self.model, 
-                                      earthmodel=self.earth_model, 
-                                      Nst=50, 
-                                      Nav=50,
-                                      osc_params=self.osc_params)
-    
-    def evolve_earth(self, E_nus, nu: str, ceta):
-        """Evolve the density matrix through the Earth matter using the PREM model and return the final density matrix at the detector.
-        """
-        density_elements = self.nu_density_elements[nu]
-        rho_earthceta = self.earth_propagator.evolve_rhosolar(density_elements, E_nus, ceta)
 
- 4) Pre-defined PREM --------------------------------------------
+
+
+
+# 4) Pre-defined PREM --------------------------------------------
         
 xr_km = [0., 1221.5, 3480.0, 5701.0, 5771.0, 5971.0, 6151.0,
                6346.6, 6356.0, 6368.0, 6371.0, 6371.0 + 15.0]  # your boundaries
