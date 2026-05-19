@@ -202,4 +202,24 @@ class DensityMatrixEarthCalculator():
         """
         density_elements = self.nu_density_elements[nu]
         rho_earthceta = self.earth_propagator.evolve_rhosolar(density_elements, E_nus, ceta)
+
+ 4) Pre-defined PREM --------------------------------------------
+        
+xr_km = [0., 1221.5, 3480.0, 5701.0, 5771.0, 5971.0, 6151.0,
+               6346.6, 6356.0, 6368.0, 6371.0, 6371.0 + 15.0]  # your boundaries
+coeffs = [
+    (13.0885, 0.0, -8.8381, 0.0),   # layer 1: a,b,c,d in r = R/RE
+    (12.5815, -1.2638, -3.6426, -5.528),  # layer 2
+    (7.9565,  -6.4761,  5.5283,  -3.0807),  # ...
+    (5.3197,  -1.4836,  0.0,  0.0),
+    (11.2494,  -8.0298,  0.0,  0.0),
+    (7.1089,  -3.8045,  0.0,  0.0),
+    (2.6910,   0.6924,  0.0,  0.0),
+    (2.9,      0.0,  0.0,  0.0),
+    (2.6,    0.0,  0.0,  0.0),
+    (1.02,    0.0,  0.0,  0.0),
+    (0.000,    0.0,  0.0,  0.0),
+]
+PREMmodel = LayeredPolyEarth(xr_km=xr_km, coeffs=coeffs,
+                             Ye_core=0.466, Ye_mantle=0.494)
         
