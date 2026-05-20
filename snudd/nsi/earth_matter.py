@@ -106,6 +106,17 @@ class EarthProbEvolve:
         self.ERad = CF * RE_KM
         self.ARad = CF * ATM_KM
         self.tRad = self.ERad + self.ARad
+        
+    def _vacuum_H(self, Enu: float) -> np.ndarray:
+        U = osc.UPMNS(self.osc_params)
+        diag = np.diag([0.0, self.osc_params.delta_m12/(2*Enu), self.osc_params.delta_m31/(2*Enu)])
+        return U @ diag @ U.conj().T
+
+    def _V_matrix(self) -> np.ndarray:
+        epsmat = self.model.eps_matrix
+        return (np.array([[1.0 , 0.0 , 0.0], 
+                   [0.0, 0.0 ,0.0], 
+                   [0.0, 0.0, 0.0 ]], dtype=np.complex128) + epsmat)
 
     def _r_over_RE_along_chord(self, x: float, ceta: float) -> float:
         norm = 1.0 / (RE_KM + ATM_KM)
