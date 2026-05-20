@@ -253,5 +253,5 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
         return interp_expanded_rhos
 
 
-sm = models.GeneralNSI(np.zeros((3, 3)), 0, 0)
-interp_density_sm = DensityMatrixCalculator(sm).interpolate_density_elements()
+sm = models.SM()
+interp_density_sm = DensityMatrixEarthCalculator(sm).interpolate_earth_density_elements()
