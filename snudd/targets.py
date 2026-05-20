@@ -47,10 +47,10 @@ class Target(ABC):
 
         self._spec.prepare_probabilities()
 
-    def prepare_density(self):
+    def prepare_density(self, cetas=[-1], ceta_weights=[1]):
         """Prepare probability density for use in spectrum."""
 
-        self._spec.prepare_density()
+        self._spec.prepare_density(cetas, ceta_weights)
 
 
 class Nucleus(Target):

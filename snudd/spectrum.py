@@ -62,7 +62,7 @@ class SpectrumTrace():
         dsigma_mat = self.target.cross_section_flavour(E_R, E_nus)
         dsigma_mat = dsigma_mat.swapaxes(0,1)
         for iceta in range(len(self.cetas)):
-            density_mat = self.density_calc.matrix_from_elements(density_elements_flux(E_nus))
+            density_mat = self.density_calc.matrix_from_elements(density_elements_flux[iceta](E_nus))
             density_mat = np.rollaxis(density_mat, 3)
             matrix_mult = np.matmul(density_mat, dsigma_mat)
             matrix_mult = matrix_mult.swapaxes(0,1)
@@ -71,7 +71,7 @@ class SpectrumTrace():
             rates = N_targets * np.trapz(integrands, E_nus.T) * config.rate_conv * self.ceta_weights[iceta]
             integrated_ceta_array[iceta] = rates
         integrated_total = np.sum(integrated_ceta_array, axis=0)
-        return np.where(rates < 0, 0, rates)
+        return np.where(integrated_total < 0, 0, integrated_total)
 
     def prepare_density(self, cetas=[-1], ceta_weights=[1]):
         """Return dictionary of interpolated probabilities for all nu sources.
@@ -79,7 +79,7 @@ class SpectrumTrace():
         E_nu_max (MeV)
         """
 
-        if np.shape(self.cetas) != np.shape(self.ceta_weights):
+        if len(cetas) != len(ceta_weights):
             raise ValueError("Cetas and ceta_weights must have the same shape.")
 
         self.cetas = cetas

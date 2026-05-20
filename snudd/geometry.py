@@ -132,7 +132,8 @@ class SolarAngles():
         dist      = np.sqrt(x**2 + y**2)     # Earth-Sun distance r in AU
         # Computing weighted histogram (weighting flux to mean distance)
         weigths, angles = np.histogram(zeniths, bins=2*bins, weights=a**2/(dist**2)/len(dist), density=False)
-        
 
+        # Get bin centers
+        angles = (angles[:-1] + angles[1:]) / 2
         # Return the flux-weighted binned zenith angle histogram
         return angles, weigths
