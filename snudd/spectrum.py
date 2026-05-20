@@ -54,22 +54,23 @@ class SpectrumTrace():
         np.putmask(E_nu_min, E_nu_min < nu_flux_fn.x.min() / 1000, nu_flux_fn.x.min() / 1000)
         np.putmask(E_nu_min, E_nu_min > nu_flux_fn.x.max() / 1000, (1 - 1e-6) * nu_flux_fn.x.max() / 1000)
         E_nus = np.geomspace(E_nu_min, nu_flux_fn.x.max() / 1000, 500)  # The relevant neutrino energies (in GeV)
-
         nu_fluxes = nu_flux_fn(E_nus * 1000).T * 1e3  # Convert to per GeV
-        density_mat = self.density_calc.matrix_from_elements(density_elements(E_nus))
-
         N_targets = self.target.number_targets_mass(E_R)
-
         E_R = np.array([E_R])
+
         dsigma_mat = self.target.cross_section_flavour(E_R, E_nus)
         dsigma_mat = dsigma_mat.swapaxes(0,1)
-        density_mat = np.rollaxis(density_mat, 3)
-        matrix_mult = np.matmul(density_mat, dsigma_mat)
-        matrix_mult = matrix_mult.swapaxes(0,1)
+        integrated_ceta_array = np.zeros(shape=(len(self.cetas), len(E_R)))
+        for iceta in range(len(self.cetas)):
+            density_mat = self.density_calc.matrix_from_elements(density_elements_flux(E_nus))
+            density_mat = np.rollaxis(density_mat, 3)
+            matrix_mult = np.matmul(density_mat, dsigma_mat)
+            matrix_mult = matrix_mult.swapaxes(0,1)
 
-        integrands = nu_fluxes * matrix_mult.trace(axis1=-2, axis2=-1).T
-        rates = N_targets * np.trapz(integrands, E_nus.T) * config.rate_conv
-
+            integrands = nu_fluxes * matrix_mult.trace(axis1=-2, axis2=-1).T
+            rates = N_targets * np.trapz(integrands, E_nus.T) * config.rate_conv * self.ceta_weights[iceta]
+            integrated_ceta_array[iceta] = rates
+        integrated_total = np.sum(integrated_ceta_array, axis=0)
         return np.where(rates < 0, 0, rates)
 
     def prepare_density(self, cetas=[-1], ceta_weights=[1]):
