@@ -209,9 +209,9 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
         for ceta in cetas:
             # Compute S matrix only once, does not depend on the initial density matrix 
             # 1) build S(E) for all energies
-            S_list = [self.earth_propagator.S_matrix(E, ceta) for E in E_nus]
-            S = np.stack(S_list, axis=0)                    # (N,3,3)
-            S_angles.append(S)
+            S_list = self.earth_propagator.S_matrix_batch(E_nus, ceta) # (N,3,3)
+            # S = np.stack(S_list, axis=0)                    
+            S_angles.append(S_list)
         #------------------------------------------------
 
         interp_expanded_rhos = {}

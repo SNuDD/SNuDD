@@ -73,7 +73,7 @@ class SpectrumTrace():
         E_nu_max (MeV)
         """
 
-        interp_density_elements = self.density_calc.interpolate_density_elements(cetas)
+        interp_density_elements = self.density_calc.interpolate_earth_density_elements(cetas)
         self.nu_density_elements = interp_density_elements
 
     def spectrum(self, E_Rs, total=True, nu: str = None):
