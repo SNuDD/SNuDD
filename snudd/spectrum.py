@@ -22,6 +22,8 @@ class SpectrumTrace():
         self.osc_params = target.osc_params
         self.density_calc = DensityMatrixEarthCalculator(self.model, osc_params=self.osc_params, adiabatic_check=False)
         self.nu_density_elements = interp_density_sm
+        self.cetas = [-1]
+        self.ceta_weights = [1]
 
     def nu_minimum_energy(self, E_R):
         """Return neutrino minimum energy given a recoil in GeV."""
@@ -32,18 +34,21 @@ class SpectrumTrace():
     def _rate_nu(self, E_R, nu):
         """Return differential rate for a neutrino source. Overridden for each breakdown by subclasses."""
 
-        density_elements = self.nu_density_elements[nu]
         E_nu_min = self.nu_minimum_energy(E_R)  # Minimum neutrino energy
+        density_elements_flux = self.nu_density_elements[nu]
         if nu in config.NU_SOURCE_KEYS_MONO:
             E_nu_mono = config.E_nus[nu][0] / 1000
             E_nus_mins = (E_nu_min < E_nu_mono)
-            density_mat = self.density_calc.matrix_from_elements(density_elements(E_nu_mono))
             dsigma_mat = self.target.cross_section_flavour(E_R, E_nu_mono)
-            matrix_mult = np.matmul(density_mat, dsigma_mat)
             v_flux = np.array([[config.nu_flux[nu]]])
-            integrated = v_flux * matrix_mult.trace(axis1=-2, axis2=-1)
-
-            return self.target.number_targets_mass(E_R) * integrated * config.rate_conv * E_nus_mins
+            integrated_ceta_array = np.zeros(shape=(len(self.cetas), len(E_R)))
+            for iceta in range(len(self.cetas)):
+                density_mat = self.density_calc.matrix_from_elements(density_elements_flux[iceta](E_nu_mono))
+                matrix_mult = np.matmul(density_mat, dsigma_mat)
+                integrated = v_flux * matrix_mult.trace(axis1=-2, axis2=-1) * self.ceta_weights[iceta]
+                integrated_ceta_array[iceta] = integrated
+            integrated_total = np.sum(integrated_ceta_array, axis=0)
+            return self.target.number_targets_mass(E_R) * integrated_total * config.rate_conv * E_nus_mins
 
         nu_flux_fn = config.nu_flux_interp[nu]
         np.putmask(E_nu_min, E_nu_min < nu_flux_fn.x.min() / 1000, nu_flux_fn.x.min() / 1000)
@@ -67,14 +72,20 @@ class SpectrumTrace():
 
         return np.where(rates < 0, 0, rates)
 
-    def prepare_density(self, cetas=[-1]):
+    def prepare_density(self, cetas=[-1], ceta_weights=[1]):
         """Return dictionary of interpolated probabilities for all nu sources.
         Interpolation done between neutrinos energies of E_nu_min and
         E_nu_max (MeV)
         """
 
+        if np.shape(self.cetas) != np.shape(self.ceta_weights):
+            raise ValueError("Cetas and ceta_weights must have the same shape.")
+
+        self.cetas = cetas
+        self.ceta_weights = ceta_weights
         interp_density_elements = self.density_calc.interpolate_earth_density_elements(cetas)
         self.nu_density_elements = interp_density_elements
+        
 
     def spectrum(self, E_Rs, total=True, nu: str = None):
         """
