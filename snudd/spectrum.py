@@ -56,11 +56,11 @@ class SpectrumTrace():
         E_nus = np.geomspace(E_nu_min, nu_flux_fn.x.max() / 1000, 500)  # The relevant neutrino energies (in GeV)
         nu_fluxes = nu_flux_fn(E_nus * 1000).T * 1e3  # Convert to per GeV
         N_targets = self.target.number_targets_mass(E_R)
-        E_R = np.array([E_R])
 
+        integrated_ceta_array = np.zeros(shape=(len(self.cetas), len(E_R)))
+        E_R = np.array([E_R])
         dsigma_mat = self.target.cross_section_flavour(E_R, E_nus)
         dsigma_mat = dsigma_mat.swapaxes(0,1)
-        integrated_ceta_array = np.zeros(shape=(len(self.cetas), len(E_R)))
         for iceta in range(len(self.cetas)):
             density_mat = self.density_calc.matrix_from_elements(density_elements_flux(E_nus))
             density_mat = np.rollaxis(density_mat, 3)
