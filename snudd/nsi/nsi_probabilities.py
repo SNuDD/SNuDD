@@ -84,14 +84,6 @@ class ProbabilityCalculator:
         norm = config.trapezoid(flux_dists.dist_dict[nu](xs), xs)  # Account for slight lack of norm
         return config.trapezoid(integrand, xs) / norm
 
-
-
-
-
-
-
-
-
 class DensityMatrixCalculator(ProbabilityCalculator):
 
     def __init__(self, model, osc_params=osc.osc_params_best, adiabatic_check=False):
@@ -126,7 +118,6 @@ class DensityMatrixCalculator(ProbabilityCalculator):
         
         return matrix 
     
-
     def density(self, E_nus, nu: str):
         """Return the neutrino density matrix in the flavour basis sampled at N energies of the energy array E_nus.
            Returns an array of matrices with shape (N, 3, 3).
@@ -142,8 +133,6 @@ class DensityMatrixCalculator(ProbabilityCalculator):
 
         return matrix
 
-
-   
     def interpolate_density_elements(self, E_nu_min=3.4640e-3, E_nu_max=1.8784e1):
 
         """Return dictionary of interpolated de for all nu sources.
@@ -174,7 +163,6 @@ class DensityMatrixCalculator(ProbabilityCalculator):
 
         return interp_expanded_rhos
 
-
     def matrix_from_elements(self, rho_els):
         ee_re, ee_im, emu_re, emu_im, eta_re, eta_im = (rho_els[0], rho_els[1], rho_els[2], rho_els[3],
                                                         rho_els[4], rho_els[5])
@@ -192,50 +180,33 @@ class DensityMatrixCalculator(ProbabilityCalculator):
     
         return rho
     
-
-
-
-
-
-
 class DensityMatrixEarthCalculator(DensityMatrixCalculator):
     """Class to calculate the evolution of the density matrix through the Earth matter using the PREM model."""
 
-    def __init__(self, model, earth_model=em.PREMmodel, cetas = [0], Nslabs=50, osc_params=osc.osc_params_best, adiabatic_check=False):
+    def __init__(self, model, earth_model=em.PREMmodel, Nslabs=50, osc_params=osc.osc_params_best, adiabatic_check=False):
         super().__init__(model, osc_params, adiabatic_check)
         self.model = model
         self.earth_model = earth_model
-        self.cetas = cetas # List of cos(nadir) angles to compute the evolution for, if you want to precompute S matrices for multiple angles.
         self.earth_propagator = em.EarthProbEvolve(model=self.model, 
                                       earthmodel=self.earth_model, 
                                       Nst=Nslabs, # Number of slices to divide the Earth into for the evolution
                                       Nav=50,     # Number of points to average over for the matter potential in each slice
                                       osc_params=self.osc_params)
         
-        
-    
-    def evolve_earth(self, E_nus, nu: str, ceta):
-        """Evolve the density matrix through the Earth matter using the PREM model and return the final density matrix at the detector.
-        """
-        density_elements = self.nu_density_elements[nu]
-        rho_earthceta = self.earth_propagator.evolve_rhosolar(density_elements, E_nus, ceta)
-    
-
-    def interpolate_earth_density_elements(self, E_nu_min=3.4640e-3, E_nu_max=1.8784e1):
+    def interpolate_earth_density_elements(self, cetas=[-1], E_nu_min=3.4640e-3, E_nu_max=1.8784e1):
 
         """Return dictionary of interpolated de for all nu sources.
         Interpolation done between neutrinos energies of E_nu_min and
-        E_nu_max (MeV)
+        E_nu_max (MeV). By default, cos(eta) = -1, i.e. neutrinos coming from the nadir direction and not crossing the Earth.
         """
 
         E_nus = np.geomspace(E_nu_min / 1e3, E_nu_max / 1e3, 500)  # GeV!
-        
 
         # Precompute earth matter evolution S matrices for all energies and angles to speed up interpolation of density matrix elements at the end
         # Do this for each nadir angle
         #------------------------------------------------
         S_angles = []
-        for ceta in self.cetas:
+        for ceta in cetas:
             # Compute S matrix only once, does not depend on the initial density matrix 
             # 1) build S(E) for all energies
             S_list = [self.earth_propagator.S_matrix(E, ceta) for E in E_nus]
@@ -251,7 +222,7 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
             rhos  = self.density(E_nus, nu)
             angular_interps = []
 
-            for i, ceta in enumerate(self.cetas):
+            for i, ceta in enumerate(cetas):
                 S_earth     = S_angles[i]
                 S_earth_dag = np.swapaxes(S_earth.conj(), -1, -2)     # (N,3,3)
 
@@ -280,38 +251,6 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
             interp_expanded_rhos[nu] = angular_interps
 
         return interp_expanded_rhos
-
-
-
-
-
-# class DensityMatrixEarthCalculator():
-#     """Class to calculate the evolution of the density matrix through the Earth matter using the PREM model."""
-
-#     def __init__(self, 
-#                  model, 
-#                  nu_density_elements, 
-#                  earth_model=em.PREMmodel, 
-#                  osc_params=osc.osc_params_best):
-#         self.model = model
-#         self.nu_density_elements = nu_density_elements
-#         self.earth_model = earth_model
-#         self.osc_params = osc_params
-#         self.earth_propagator = em.EarthProbEvolve(model=self.model, 
-#                                       earthmodel=self.earth_model, 
-#                                       Nst=50, 
-#                                       Nav=50,
-#                                       osc_params=self.osc_params)
-    
-#     def evolve_earth(self, E_nus, nu: str, ceta):
-#         """Evolve the density matrix through the Earth matter using the PREM model and return the final density matrix at the detector.
-#         """
-#         density_elements = self.nu_density_elements[nu]
-#         rho_earthceta = self.earth_propagator.evolve_rhosolar(density_elements, E_nus, ceta)
-
-
-
-
 
 
 sm = models.GeneralNSI(np.zeros((3, 3)), 0, 0)
