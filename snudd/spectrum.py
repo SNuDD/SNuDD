@@ -7,11 +7,10 @@ import typing
 import numpy as np
 from scipy.interpolate import interp1d
 from snudd import config
-from snudd.nsi.nsi_probabilities import DensityMatrixCalculator, interp_density_sm
+from snudd.nsi.nsi_probabilities import DensityMatrixEarthCalculator, interp_density_sm
 
 if typing.TYPE_CHECKING:
     from snudd.targets import Target
-
 
 class SpectrumTrace():
     """Target (nucleus or electron) spectrum."""
@@ -21,12 +20,11 @@ class SpectrumTrace():
         self.target = target
         self.model = target.model
         self.osc_params = target.osc_params
-        self.density_calc = DensityMatrixCalculator(self.model, self.osc_params, adiabatic_check=False)
+        self.density_calc = DensityMatrixEarthCalculator(self.model, osc_params=self.osc_params, adiabatic_check=False)
         self.nu_density_elements = interp_density_sm
 
     def nu_minimum_energy(self, E_R):
         """Return neutrino minimum energy given a recoil in GeV."""
-        m = self.target.mass
         E_nu_min = 1. / 2. * (E_R + np.sqrt(E_R ** 2 + 2 * self.target.mass * E_R))
 
         return E_nu_min
@@ -69,13 +67,13 @@ class SpectrumTrace():
 
         return np.where(rates < 0, 0, rates)
 
-    def prepare_density(self):
+    def prepare_density(self, cetas=[-1]):
         """Return dictionary of interpolated probabilities for all nu sources.
         Interpolation done between neutrinos energies of E_nu_min and
         E_nu_max (MeV)
         """
 
-        interp_density_elements = self.density_calc.interpolate_density_elements()
+        interp_density_elements = self.density_calc.interpolate_density_elements(cetas)
         self.nu_density_elements = interp_density_elements
 
     def spectrum(self, E_Rs, total=True, nu: str = None):
