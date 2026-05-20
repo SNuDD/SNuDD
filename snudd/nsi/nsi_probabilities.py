@@ -2,7 +2,7 @@
 import numpy as np
 from scipy.interpolate import interp1d
 from snudd import config
-from snudd.nsi import flux_dists, oscillation as osc
+from snudd.nsi import flux_dists, earth_matter as em, oscillation as osc
 from snudd import models
 
 
@@ -197,29 +197,117 @@ class DensityMatrixCalculator(ProbabilityCalculator):
 
 
 
-class DensityMatrixEarthCalculator():
+
+class DensityMatrixEarthCalculator(DensityMatrixCalculator):
     """Class to calculate the evolution of the density matrix through the Earth matter using the PREM model."""
 
-    def __init__(self, 
-                 model, 
-                 nu_density_elements, 
-                 earth_model=em.PREMmodel, 
-                 osc_params=osc.osc_params_best):
+    def __init__(self, model, earth_model=em.PREMmodel, cetas = [0], Nslabs=50, osc_params=osc.osc_params_best, adiabatic_check=False):
+        super().__init__(model, osc_params, adiabatic_check)
         self.model = model
-        self.nu_density_elements = nu_density_elements
         self.earth_model = earth_model
-        self.osc_params = osc_params
+        self.cetas = cetas # List of cos(nadir) angles to compute the evolution for, if you want to precompute S matrices for multiple angles.
         self.earth_propagator = em.EarthProbEvolve(model=self.model, 
                                       earthmodel=self.earth_model, 
-                                      Nst=50, 
-                                      Nav=50,
+                                      Nst=Nslabs, # Number of slices to divide the Earth into for the evolution
+                                      Nav=50,     # Number of points to average over for the matter potential in each slice
                                       osc_params=self.osc_params)
+        
+        
     
     def evolve_earth(self, E_nus, nu: str, ceta):
         """Evolve the density matrix through the Earth matter using the PREM model and return the final density matrix at the detector.
         """
         density_elements = self.nu_density_elements[nu]
         rho_earthceta = self.earth_propagator.evolve_rhosolar(density_elements, E_nus, ceta)
+    
+
+    def interpolate_earth_density_elements(self, E_nu_min=3.4640e-3, E_nu_max=1.8784e1):
+
+        """Return dictionary of interpolated de for all nu sources.
+        Interpolation done between neutrinos energies of E_nu_min and
+        E_nu_max (MeV)
+        """
+
+        E_nus = np.geomspace(E_nu_min / 1e3, E_nu_max / 1e3, 500)  # GeV!
+        
+
+        # Precompute earth matter evolution S matrices for all energies and angles to speed up interpolation of density matrix elements at the end
+        # Do this for each nadir angle
+        #------------------------------------------------
+        S_angles = []
+        for ceta in self.cetas:
+            # Compute S matrix only once, does not depend on the initial density matrix 
+            # 1) build S(E) for all energies
+            S_list = [self.earth_propagator.S_matrix(E, ceta) for E in E_nus]
+            S = np.stack(S_list, axis=0)                    # (N,3,3)
+            S_angles.append(S)
+        #------------------------------------------------
+
+        interp_expanded_rhos = {}
+
+        for nu in config.NU_SOURCE_KEYS:
+
+            # Get the initial density matrix at Earth surface for this nu source
+            rhos  = self.density(E_nus, nu)
+            angular_interps = []
+
+            for i, ceta in enumerate(self.cetas):
+                S_earth     = S_angles[i]
+                S_earth_dag = np.swapaxes(S_earth.conj(), -1, -2)     # (N,3,3)
+
+                # Compute fully evolved density matrix: S ρ S†   (use matmul with batch dims)
+                tmp  = np.matmul(S_earth, rhos)            # (N,3,3)
+                rhos = np.matmul(tmp, S_earth_dag)         # (N,3,3)
+            
+                # Extract the density matrix elements for interpolation
+                rhoee   = rhos[:, 0, 0]
+                rhoemu  = rhos[:, 0, 1]
+                rhoeta  = rhos[:, 0, 2]
+                rhomumu = rhos[:, 1, 1]
+                rhomuta = rhos[:, 1, 2]
+                rhotata = rhos[:, 2, 2]
+
+                expanded_rhos = (np.real(rhoee),  np.imag(rhoee), 
+                                np.real(rhoemu),  np.imag(rhoemu),
+                                np.real(rhoeta),  np.imag(rhoeta),
+                                np.real(rhomumu), np.imag(rhomumu),
+                                np.real(rhomuta), np.imag(rhomuta),
+                                np.real(rhotata), np.imag(rhotata))
+                
+                angular_interps.append(interp1d(E_nus, expanded_rhos))
+            
+            # Store the interpolations for this nu source and all angles in a list
+            interp_expanded_rhos[nu] = angular_interps
+
+        return interp_expanded_rhos
+
+
+
+
+
+# class DensityMatrixEarthCalculator():
+#     """Class to calculate the evolution of the density matrix through the Earth matter using the PREM model."""
+
+#     def __init__(self, 
+#                  model, 
+#                  nu_density_elements, 
+#                  earth_model=em.PREMmodel, 
+#                  osc_params=osc.osc_params_best):
+#         self.model = model
+#         self.nu_density_elements = nu_density_elements
+#         self.earth_model = earth_model
+#         self.osc_params = osc_params
+#         self.earth_propagator = em.EarthProbEvolve(model=self.model, 
+#                                       earthmodel=self.earth_model, 
+#                                       Nst=50, 
+#                                       Nav=50,
+#                                       osc_params=self.osc_params)
+    
+#     def evolve_earth(self, E_nus, nu: str, ceta):
+#         """Evolve the density matrix through the Earth matter using the PREM model and return the final density matrix at the detector.
+#         """
+#         density_elements = self.nu_density_elements[nu]
+#         rho_earthceta = self.earth_propagator.evolve_rhosolar(density_elements, E_nus, ceta)
 
 
 

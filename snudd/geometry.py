@@ -121,7 +121,7 @@ class SolarAngles():
 
 
     def zenith_hist(self, bins=25):
-        """Compute binned histogram of zenith angles with [bins] number of bins."""
+        """Compute binned histogram of zenith angles with [2*bins] number of bins."""
 
         _ , coords  = self.orbit() 
         _ , zeniths = self.zenith_angles()
@@ -132,6 +132,7 @@ class SolarAngles():
         dist      = np.sqrt(x**2 + y**2)     # Earth-Sun distance r in AU
         # Computing weighted histogram (weighting flux to mean distance)
         weigths, angles = np.histogram(zeniths, bins=2*bins, weights=a**2/(dist**2)/len(dist), density=False)
+        
 
         # Return the flux-weighted binned zenith angle histogram
         return angles, weigths
