@@ -231,6 +231,85 @@ class EarthProbEvolve:
         return np.matmul(np.matmul(S, rho_solar), Sdag)
 
 
+class EarthProbEvolveOld:
+    def __init__(self,  model, osc_params=osc.osc_params_best, 
+                 earthmodel: Optional[EarthModel] = None, Nst: int = 50, Nav: int = 50):
+        self.osc_params = osc_params
+        self.model= model
+        self.earthmodel = earthmodel  # can be any EarthModel
+        self.Nst = int(Nst); self.Nav = int(Nav)
+        self.ERad = CF * RE_KM
+        self.ARad = CF * ATM_KM
+        self.tRad = self.ERad + self.ARad
+
+    def _vacuum_H(self, Enu: float) -> np.ndarray:
+        U = osc.UPMNS(self.osc_params)
+        diag = np.diag([0.0, self.osc_params.delta_m12/(2*Enu), self.osc_params.delta_m31/(2*Enu)])
+        return U @ diag @ U.conj().T
+
+    def _V_matrix(self) -> np.ndarray:
+        epsmat = self.model.eps_matrix
+        return (np.array([[1.0 , 0.0 , 0.0], 
+                   [0.0, 0.0 ,0.0], 
+                   [0.0, 0.0, 0.0 ]], dtype=np.complex128) + epsmat)
+
+    def _r_over_RE_along_chord(self, x: float, ceta: float) -> float:
+        norm = 1.0 / (RE_KM + ATM_KM)
+        root_common = np.sqrt(max(0.0, 1.0 - (norm*RE_KM)**2 * (1 - ceta*ceta)))
+        r_dimless = np.sqrt(max(0.0, 1 + x*x - 2*x*root_common)) / (norm*RE_KM)
+        return r_dimless
+
+    def S_matrix(self, Enu_GeV: float, ceta: float) -> np.ndarray:
+        if np.arccos(ceta) >= np.pi/2:
+            return np.eye(3, dtype=np.complex128)
+
+        Enu = Enu_GeV 
+        Hv = self._vacuum_H(Enu)
+        Vf = self._V_matrix()
+
+        t1 = (self.ERad*ceta + np.sqrt(max(0.0, self.tRad*self.tRad
+                  - self.ERad*self.ERad*(1 - ceta*ceta)))) / self.tRad
+
+        S = np.eye(3, dtype=np.complex128)
+        for k in range(self.Nst):
+            xmin = (t1 * k) / self.Nst
+            xmax = (t1 * (k+1)) / self.Nst
+            # average Ye*rho for this slice from whichever model was provided
+            Vav = 0.0
+            for l in range(self.Nav + 1):
+                xi = xmin + (xmax - xmin) * (l/(self.Nav + 1))
+                r_over_RE = self._r_over_RE_along_chord(xi, ceta)
+                Vav += self.earthmodel.rhoYe_gcm3(r_over_RE)
+            Vav /= (self.Nav + 1)
+
+            H = Hv + s2GFNa * Vav * Vf
+            Em, Um = np.linalg.eigh(H)
+            phase = np.exp(-1j * Em * self.tRad * (xmax - xmin))
+            S = S @ (Um @ np.diag(phase) @ Um.conj().T)
+        return S
+    
+    def evolve_rhosolar(self, rho_solar, enus_GeV, ceta):
+        """
+        rho_solar_stack: (N,3,3) complex array  [your solar density matrices at Earth surface]
+        enus_GeV       : (N,) energies
+        ceta           : scalar cos(nadir)
+        propagator     : an object with S_matrix(E, ceta) -> (3,3) complex
+
+        Returns:
+        rho_earth_stack : (N,3,3) complex
+        """
+        # 1) build S(E) for all energies
+        S_list = [self.S_matrix(E, ceta) for E in enus_GeV]
+        S = np.stack(S_list, axis=0)                    # (N,3,3)
+        Sdag = np.swapaxes(S.conj(), -1, -2)            # (N,3,3)
+
+        # 2) batch multiply: S ρ S†   (use matmul with batch dims)
+        tmp = np.matmul(S, rho_solar)             # (N,3,3)
+        rho_earth = np.matmul(tmp, Sdag)                # (N,3,3)
+
+
+        return rho_earth 
+
 # 4) Pre-defined PREM --------------------------------------------
         
 xr_km = [0., 1221.5, 3480.0, 5701.0, 5771.0, 5971.0, 6151.0,
