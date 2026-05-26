@@ -67,28 +67,9 @@ class LayeredPolyEarth(EarthModel):
             raise ValueError("xr_km must be strictly increasing and finite")
         if len(self.coeffs) != len(xr) - 1:
             raise ValueError("coeffs length must be len(xr_km)-1")
+        self.coeffs_arr = np.asarray(self.coeffs)
         self.xr = xr
         self.RE_KM = 6371.0   # Earth radius in km; used for r/RE conversion in rhoYe_gcm3
-
-    # NOTE: The following methods are not currently used in the vectorized rhoYe_gcm3, but are kept for reference and potential use in non-vectorized contexts.
-    # def _layer_index(self, R_km: float) -> int:
-    #     # right-edge binning; clamp to last layer
-    #     k = int(np.searchsorted(self.xr, R_km, side="right") - 1)
-    #     return max(0, min(k, len(self.xr) - 2))
-
-    # def _Ye(self, r: float) -> float:
-    #     if self.ye_fn is not None:
-    #         return float(self.ye_fn(r))
-    #     # default: core vs mantle split at r = 0.546 like classic PREM usage
-    #     return self.Ye_core if r <= 0.546 else self.Ye_mantle
-
-    # def rhoYe_gcm3(self, r_over_RE: float) -> float:
-    #     r = float(np.clip(r_over_RE, 0.0, 1.0))
-    #     R_km = r * self.RE_KM
-    #     k = self._layer_index(R_km)
-    #     a, b, c, d = self.coeffs[k]
-    #     rho = a + b*r + c*r*r + d*r*r*r  # g/cm^3 (mass density)
-    #     return self._Ye(r) * rho
 
 
     def _Ye(self, r):
@@ -114,7 +95,7 @@ class LayeredPolyEarth(EarthModel):
         k = np.clip(k, 0, len(self.xr) - 2)
 
         # Get polynomial coefficients for each r; shape (len(r), 4)
-        coeffs = np.array(self.coeffs)
+        coeffs = self.coeffs_arr  
         a = coeffs[k, 0]
         b = coeffs[k, 1]
         c = coeffs[k, 2]
@@ -199,29 +180,23 @@ class EarthProbEvolve:
     def __init__(self,  model, osc_params=osc.osc_params_best, 
                  earthmodel: Optional[EarthModel] = None, Nst: int = 50, Nav: int = 50):
         self.osc_params = osc_params
+        self.U = osc.UPMNS(self.osc_params)
+        self.U_conj = self.U.conj()
         self.model= model
         self.earthmodel = earthmodel  # can be any EarthModel
         self.Nst = int(Nst); self.Nav = int(Nav)
         self.ERad = CF * RE_KM
         self.ARad = CF * ATM_KM
         self.tRad = self.ERad + self.ARad
+        self._Vf = None
         
-    def _vacuum_H(self, Enu: float) -> np.ndarray:
-        U = osc.UPMNS(self.osc_params)
-        diag = np.diag([0.0, self.osc_params.delta_m12/(2*Enu), self.osc_params.delta_m31/(2*Enu)])
-        return U @ diag @ U.conj().T
-
-    def _V_matrix(self) -> np.ndarray:
-        epsmat = self.model.eps_matrix
-        return (np.array([[1.0 , 0.0 , 0.0], 
-                   [0.0, 0.0 ,0.0], 
-                   [0.0, 0.0, 0.0 ]], dtype=np.complex128) + epsmat)
-
-    def _r_over_RE_along_chord(self, x: float, cnadir: float) -> float:
-        norm = 1.0 / (RE_KM + ATM_KM)
-        root_common = np.sqrt(max(0.0, 1.0 - (norm*RE_KM)**2 * (1 - cnadir*cnadir)))
-        r_dimless = np.sqrt(max(0.0, 1 + x*x - 2*x*root_common)) / (norm*RE_KM)
-        return r_dimless
+    def _V_matrix(self):    
+        # Cache the V matrix since it doesn't depend on energy; only on the NSI parameters.
+        if self._Vf is None:        
+            Vf = np.zeros((3,3), dtype=np.complex128)        
+            Vf[0,0] = 1.0        
+            self._Vf = Vf + self.model.eps_matrix    
+        return self._Vf
     
     def _precompute_slices(self, cnadir: float):
         """
@@ -266,7 +241,7 @@ class EarthProbEvolve:
             # If odd number of slices, save the last one to multiply back later
             if M.shape[1] % 2 == 1:
                 last = M[:, -1:] # shape (N, 1, 3, 3)
-                M = M[:, :-1] # shape (N, Nst-1, 3, 3)
+                M = M[:, :-1]    # shape (N, Nst-1, 3, 3)
             else:
                 last = None
             # Multiply pairs of adjacent slices
@@ -297,16 +272,18 @@ class EarthProbEvolve:
         # Build Hv(E) for all N_E energies at once
         # Hv[n] = U @ diag(0, dm12/2E, dm31/2E) @ U†
         # ------------------------------------------------------------------ #
-        U    = osc.UPMNS(self.osc_params)
-        dm12 = self.osc_params.delta_m12
-        dm31 = self.osc_params.delta_m31
+        # U    = osc.UPMNS(self.osc_params)
+        U      = self.U
+        U_conj = self.U_conj    
+        dm12   = self.osc_params.delta_m12
+        dm31   = self.osc_params.delta_m31
 
         diag_vals          = np.zeros((N_E, 3))
         diag_vals[:, 1]    = dm12 / (2 * Enus)
         diag_vals[:, 2]    = dm31 / (2 * Enus)
 
         # Hv[n,i,j] = Σ_a  U[i,a] · diag_vals[n,a] · U*[j,a]
-        Hv = np.einsum('ia,na,ja->nij', U, diag_vals, U.conj())   # (N_E, 3, 3)
+        Hv = np.einsum('ia,na,ja->nij', U, diag_vals, U_conj)   # (N_E, 3, 3)
 
         # ------------------------------------------------------------------ #
         # Full Hamiltonian: H[n,k] = Hv[n] + s2GFNa·Vav[k]·Vf
@@ -336,15 +313,16 @@ class EarthProbEvolve:
         # Sequential product over slices — only Nst iterations, each a
         # batched (N_E, 3, 3) matmul
         # ------------------------------------------------------------------ #
-        S = np.eye(3, dtype=np.complex128)[None].repeat(N_E, axis=0)   # (N_E, 3, 3)
-        # Sequential matrix product over slices; S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1]
-        for k in range(self.Nst):
-            S = np.einsum('nij,njk->nik', S, M[:, k])
+        return self._matmul_scan(M)  # (N_E, 3, 3)
+    
+        # S = np.eye(3, dtype=np.complex128)[None].repeat(N_E, axis=0)   # (N_E, 3, 3)
+        # # Sequential matrix product over slices; S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1]
+        # for k in range(self.Nst):
+        #     S = np.einsum('nij,njk->nik', S, M[:, k])
 
-        return S                                                      # (N_E, 3, 3)
+        # return S                                                      # (N_E, 3, 3)
 
-        # return self._matmul_scan(M)  # (N_E, 3, 3)
-
+        
 
     def evolve_rhosolar(self, rho_solar, enus_GeV, cnadir):
         """
@@ -356,6 +334,8 @@ class EarthProbEvolve:
         S    = self.S_matrix_batch(np.asarray(enus_GeV), cnadir)   # (N_E, 3, 3)
         Sdag = np.swapaxes(S.conj(), -1, -2)
         return np.matmul(np.matmul(S, rho_solar), Sdag)
+
+
 
 
 
