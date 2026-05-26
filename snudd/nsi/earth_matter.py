@@ -217,20 +217,20 @@ class EarthProbEvolve:
                    [0.0, 0.0 ,0.0], 
                    [0.0, 0.0, 0.0 ]], dtype=np.complex128) + epsmat)
 
-    def _r_over_RE_along_chord(self, x: float, ceta: float) -> float:
+    def _r_over_RE_along_chord(self, x: float, cnadir: float) -> float:
         norm = 1.0 / (RE_KM + ATM_KM)
-        root_common = np.sqrt(max(0.0, 1.0 - (norm*RE_KM)**2 * (1 - ceta*ceta)))
+        root_common = np.sqrt(max(0.0, 1.0 - (norm*RE_KM)**2 * (1 - cnadir*cnadir)))
         r_dimless = np.sqrt(max(0.0, 1 + x*x - 2*x*root_common)) / (norm*RE_KM)
         return r_dimless
     
-    def _precompute_slices(self, ceta: float):
+    def _precompute_slices(self, cnadir: float):
         """
-        Precompute slice geometry and density averages for a given ceta.
+        Precompute slice geometry and density averages for a given cnadir.
         These depend only on the trajectory, not on energy.
         Returns t1, step_sizes (Nst,), Vav (Nst,).
         """
-        t1 = (self.ERad * ceta
-            + np.sqrt(max(0.0, self.tRad**2 - self.ERad**2 * (1 - ceta**2)))
+        t1 = (self.ERad * cnadir
+            + np.sqrt(max(0.0, self.tRad**2 - self.ERad**2 * (1 - cnadir**2)))
             ) / self.tRad
 
         k      = np.arange(self.Nst)
@@ -244,7 +244,7 @@ class EarthProbEvolve:
 
         # Vectorised r/RE — inline the geometry formula to avoid a Python loop
         norm        = 1.0 / (RE_KM + ATM_KM)
-        root_common = np.sqrt(max(0.0, 1.0 - (norm * RE_KM)**2 * (1 - ceta**2)))
+        root_common = np.sqrt(max(0.0, 1.0 - (norm * RE_KM)**2 * (1 - cnadir**2)))
         r_over_RE   = (np.sqrt(np.maximum(0.0, 1 + xi**2 - 2 * xi * root_common))
                     / (norm * RE_KM))           # (Nst, Nav+1)
 
@@ -278,20 +278,20 @@ class EarthProbEvolve:
         return M[:, 0]
     
 
-    def S_matrix_batch(self, enus_GeV: np.ndarray, ceta: float) -> np.ndarray:
+    def S_matrix_batch(self, enus_GeV: np.ndarray, cnadir: float) -> np.ndarray:
         """
-        Compute the (N_E, 3, 3) array of S-matrices for N_E energies at fixed ceta.
+        Compute the (N_E, 3, 3) array of S-matrices for N_E energies at fixed cnadir.
         Replaces the per-energy loop over S_matrix().
         """
         # Neutrino energies must be in GeV for the Hamiltonian construction; ensure correct type and shape
         Enus = np.asarray(enus_GeV, dtype=float)
         N_E  = len(Enus)
 
-        # For large cos(nadir)>= pi/2 (no matter crossing), return identity matrices immediately
-        if np.arccos(ceta) >= np.pi / 2:
+        # For cos(nadir) <= 0 (no matter crossing), return identity matrices immediately
+        if cnadir <= 0:
             return np.broadcast_to(np.eye(3, dtype=np.complex128), (N_E, 3, 3)).copy()
 
-        _, dxs, Vav = self._precompute_slices(ceta)    # (Nst,), (Nst,)
+        _, dxs, Vav = self._precompute_slices(cnadir)    # (Nst,), (Nst,)
 
         # ------------------------------------------------------------------ #
         # Build Hv(E) for all N_E energies at once
@@ -346,14 +346,14 @@ class EarthProbEvolve:
         # return self._matmul_scan(M)  # (N_E, 3, 3)
 
 
-    def evolve_rhosolar(self, rho_solar, enus_GeV, ceta):
+    def evolve_rhosolar(self, rho_solar, enus_GeV, cnadir):
         """
         rho_solar : (N_E, 3, 3) complex
         enus_GeV  : (N_E,) energies
-        ceta      : scalar cos(nadir)
+        cnadir      : scalar cos(nadir)
         Returns rho_earth : (N_E, 3, 3)
         """
-        S    = self.S_matrix_batch(np.asarray(enus_GeV), ceta)   # (N_E, 3, 3)
+        S    = self.S_matrix_batch(np.asarray(enus_GeV), cnadir)   # (N_E, 3, 3)
         Sdag = np.swapaxes(S.conj(), -1, -2)
         return np.matmul(np.matmul(S, rho_solar), Sdag)
 
@@ -389,22 +389,22 @@ class EarthProbEvolveOld:
                    [0.0, 0.0 ,0.0], 
                    [0.0, 0.0, 0.0 ]], dtype=np.complex128) + epsmat)
 
-    def _r_over_RE_along_chord(self, x: float, ceta: float) -> float:
+    def _r_over_RE_along_chord(self, x: float, cnadir: float) -> float:
         norm = 1.0 / (RE_KM + ATM_KM)
-        root_common = np.sqrt(max(0.0, 1.0 - (norm*RE_KM)**2 * (1 - ceta*ceta)))
+        root_common = np.sqrt(max(0.0, 1.0 - (norm*RE_KM)**2 * (1 - cnadir*cnadir)))
         r_dimless = np.sqrt(max(0.0, 1 + x*x - 2*x*root_common)) / (norm*RE_KM)
         return r_dimless
 
-    def S_matrix(self, Enu_GeV: float, ceta: float) -> np.ndarray:
-        if np.arccos(ceta) >= np.pi/2:
+    def S_matrix(self, Enu_GeV: float, cnadir: float) -> np.ndarray:
+        if np.arccos(cnadir) >= np.pi/2:
             return np.eye(3, dtype=np.complex128)
 
         Enu = Enu_GeV 
         Hv = self._vacuum_H(Enu)
         Vf = self._V_matrix()
 
-        t1 = (self.ERad*ceta + np.sqrt(max(0.0, self.tRad*self.tRad
-                  - self.ERad*self.ERad*(1 - ceta*ceta)))) / self.tRad
+        t1 = (self.ERad*cnadir + np.sqrt(max(0.0, self.tRad*self.tRad
+                  - self.ERad*self.ERad*(1 - cnadir*cnadir)))) / self.tRad
 
         S = np.eye(3, dtype=np.complex128)
         for k in range(self.Nst):
@@ -414,7 +414,7 @@ class EarthProbEvolveOld:
             Vav = 0.0
             for l in range(self.Nav + 1):
                 xi = xmin + (xmax - xmin) * (l/(self.Nav + 1))
-                r_over_RE = self._r_over_RE_along_chord(xi, ceta)
+                r_over_RE = self._r_over_RE_along_chord(xi, cnadir)
                 Vav += self.earthmodel.rhoYe_gcm3(r_over_RE)
             Vav /= (self.Nav + 1)
 
@@ -424,18 +424,18 @@ class EarthProbEvolveOld:
             S = S @ (Um @ np.diag(phase) @ Um.conj().T)
         return S
     
-    def evolve_rhosolar(self, rho_solar, enus_GeV, ceta):
+    def evolve_rhosolar(self, rho_solar, enus_GeV, cnadir):
         """
         rho_solar_stack: (N_E,3,3) complex array  [your solar density matrices at Earth surface]
         enus_GeV       : (N_E,) energies
-        ceta           : scalar cos(nadir)
-        propagator     : an object with S_matrix(E, ceta) -> (3,3) complex
+        cnadir           : scalar cos(nadir)
+        propagator     : an object with S_matrix(E, cnadir) -> (3,3) complex
 
         Returns:
         rho_earth_stack : (N_E,3,3) complex
         """
         # 1) build S(E) for all energies
-        S_list = [self.S_matrix(E, ceta) for E in enus_GeV]
+        S_list = [self.S_matrix(E, cnadir) for E in enus_GeV]
         S = np.stack(S_list, axis=0)                    # (N_E,3,3)
         Sdag = np.swapaxes(S.conj(), -1, -2)            # (N_E,3,3)
 

@@ -177,8 +177,8 @@ class DensityMatrixCalculator(ProbabilityCalculator):
         if len(np.shape(rho)) > 2: 
             return rho.swapaxes(0, 2).swapaxes(1, 2)
         
-    
         return rho
+    
     
 class DensityMatrixEarthCalculator(DensityMatrixCalculator):
     """Class to calculate the evolution of the density matrix through the Earth matter using the PREM model."""
@@ -193,11 +193,12 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
                                       Nav=50,     # Number of points to average over for the matter potential in each slice
                                       osc_params=self.osc_params)
         
-    def interpolate_earth_density_elements(self, cetas=[-1], E_nu_min=3.4640e-3, E_nu_max=1.8784e1):
+    def interpolate_earth_density_elements(self, cnadirs=[-1], E_nu_min=3.4640e-3, E_nu_max=1.8784e1):
 
-        """Return dictionary of interpolated de for all nu sources.
-        Interpolation done between neutrinos energies of E_nu_min and
-        E_nu_max (MeV). By default, cos(eta) = -1, i.e. neutrinos coming from the nadir direction and not crossing the Earth.
+        """
+        Return dictionary of interpolated de for all nu sources.
+        Interpolation done between neutrinos energies of E_nu_min and E_nu_max (MeV). 
+        By default, cos(nadir) = -1, i.e. neutrinos coming from the zenith direction and not crossing the Earth.
         """
 
         E_nus = np.geomspace(E_nu_min / 1e3, E_nu_max / 1e3, 500)  # GeV!
@@ -206,10 +207,10 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
         # Do this for each nadir angle
         #------------------------------------------------
         S_angles = []
-        for ceta in cetas:
+        for cnadir in cnadirs:
             # Compute S matrix only once, does not depend on the initial density matrix 
             # 1) build S(E) for all energies
-            S_list = self.earth_propagator.S_matrix_batch(E_nus, ceta) # (N,3,3)
+            S_list = self.earth_propagator.S_matrix_batch(E_nus, cnadir) # (N,3,3)
             # S = np.stack(S_list, axis=0)                    
             S_angles.append(S_list)
         #------------------------------------------------
@@ -222,7 +223,7 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
             rhos  = self.density(E_nus, nu)
             angular_interps = []
 
-            for i, ceta in enumerate(cetas):
+            for i, cnadir in enumerate(cnadirs):
                 S_earth     = S_angles[i]
                 S_earth_dag = np.swapaxes(S_earth.conj(), -1, -2)     # (N,3,3)
 

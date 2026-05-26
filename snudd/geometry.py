@@ -1,9 +1,8 @@
-"""Provides solar zenith angles due to earth's motion."""
+"""Provides solar nadir angles due to earth's motion."""
 
 import numpy as np
 from scipy.integrate import odeint as ODEint
 
-from snudd import config
 
 
 
@@ -47,27 +46,26 @@ def azimuth(t):
     return 2*np.pi / period * (t * days_in_yr * 24) 
 
 
-def zenith(times, thetas, th_det):
-    """Returns the solar neutrino zenith angle (taken with respect to the vertical z-axis) 
+def nadir(times, thetas, th_det):
+    """Returns the solar neutrino nadir angle (taken with respect to the vertical z-axis) 
     for a given time series (in years) with corresponding true anomalies (thetas) at detector latitude (th_det)"""
     nu_dot_n = np.cos(thetas) * (np.cos(th_eccl)*np.sin(th_det)*np.cos(azimuth(times)) + np.sin(th_eccl)*np.cos(th_det)) + \
                np.sin(thetas) * np.sin(th_det)*np.sin(azimuth(times))
     
-    # return np.pi/2 - np.arccos(nu_dot_n)
     return np.arccos(nu_dot_n)
 
 
 
 
 
-# SOLAR ZENITH ANGLES
+# SOLAR NADIR ANGLES
 ############################
 
 
 
 
 class SolarAngles():
-    """Below horizon zenith angles at detector latitude."""
+    """Nadir angles with respect to upward direction at detector latitude."""
 
 
     def __init__(self, latitude, t0, T):
@@ -79,7 +77,7 @@ class SolarAngles():
 
 
     def orbit(self):
-        """Calculate earht's orbit during data taking period"""
+        """Calculate earth's orbit during data taking period"""
 
         # intial 2D boundary conditions at perihelion: x0, y0, vx0, vy0
         X0 = np.array([r_peri, 0, 0, v_peri]) 
@@ -88,7 +86,7 @@ class SolarAngles():
         index_start = 0
         times_dat   = np.linspace(self.t0, self.t0 + self.tdat, self.tdat*24*60)  # integration time series in minutes
         if self.t0 > 0:
-            index_start = int(self.t0)*24 # Evolution time steps in hours till data taking start date
+            index_start = int(self.t0) * 24     # Evolution time steps in hours till data taking start date
             times_init  = np.linspace(0, self.t0 , index_start)  # time evolution to t0 in hours
             times = np.concatenate((times_init, times_dat), axis=None)
         else:
@@ -97,43 +95,44 @@ class SolarAngles():
         # SOLVE the differential equations with initial conditions, times in units of years
         coords, info = ODEint(deriv, X0, times/days_in_yr, full_output=True)
 
-        # Return the time series and coordinates; remove first and last coordinate element from ODE solving to match length of times array
+        # Return the time series and coordinates; 
+        # Remove first and last coordinate element from ODE solving to match length of times array
         return times[index_start+1:-1], coords[index_start+1:-1]
     
 
 
-    def zenith_angles(self):
-        """Get zenith angles at detector location over data taking period."""
+    def nadir_angles(self):
+        """Get nadir angles at detector location over data taking period."""
 
         times, coords = self.orbit() 
-        x, y   = coords.T[:2]                           # Earth's 2D orbit during data taking period
-        thetas = np.arctan2(y, x)                       # True anomaly (angle around Sun taken from perihelion)
+        x, y   = coords.T[:2]           # Earth's 2D orbit during data taking period
+        thetas = np.arctan2(y, x)       # True anomaly (Earth angle around Sun taken from perihelion)
 
         # Shifting the angels to the interval [0, 2 Pi] instead of [-Pi, Pi]
         for i in range(len(thetas)):
             if thetas[i] < 0: thetas[i] = thetas[i] + 2*np.pi
 
-        # Calculate zenith angles in radians from below the horizon
-        zens = zenith(times/days_in_yr, thetas, self.lat) 
+        # Calculate nadir angles in radians 
+        nads = nadir(times/days_in_yr, thetas, self.lat) 
 
-        return times, zens
+        return times, nads
 
 
 
-    def zenith_hist(self, bins=25):
-        """Compute binned histogram of zenith angles with [2*bins] number of bins."""
+    def nadir_hist(self, bins=50):
+        """Compute binned histogram of cos(nadir) with [bins] number of bins."""
 
-        _ , coords  = self.orbit() 
-        _ , zeniths = self.zenith_angles()
+        _ , coords = self.orbit() 
+        _ , nadirs = self.nadir_angles()
 
         # Calculating Earth-Sun distance
-        x, y      = coords.T[:2]                           # Earth's 2D orbit during data taking period
-        #dist      = np.sqrt(np.pow(x,2) + np.pow(y,2))     # Earth-Sun distance r in AU
+        x, y      = coords.T[:2]             # Earth's 2D orbit during data taking period
         dist      = np.sqrt(x**2 + y**2)     # Earth-Sun distance r in AU
         # Computing weighted histogram (weighting flux to mean distance)
-        weigths, angles = np.histogram(zeniths, bins=2*bins, weights=a**2/(dist**2)/len(dist), density=False)
+        weigths, nad_bins = np.histogram(nadirs, bins=bins, weights=a**2/(dist**2)/len(dist), density=False)
 
         # Get bin centers
-        angles = (angles[:-1] + angles[1:]) / 2
-        # Return the flux-weighted binned zenith angle histogram
-        return angles, weigths
+        cnads = np.cos((nad_bins[:-1] + nad_bins[1:]) / 2)
+
+        # Return the flux-weighted binned cos(nadir) histogram
+        return cnads, weigths
