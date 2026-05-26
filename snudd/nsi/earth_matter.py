@@ -16,17 +16,36 @@ RE_KM, ATM_KM = 6371.0, 15.0
 
 # ---------- Interfaces ----------
 class EarthModel(Protocol):
-    def rhoYe_gcm3(self, r_over_RE: float) -> float:
-        """Return Ye * rho(r) in g/cm^3 at r/RE ∈ [0,1]."""
-
+    # def rhoYe_gcm3(self, r_over_RE: float) -> float:
+    #     """Return Ye * rho(r) in g/cm^3 at r/RE ∈ [0,1]."""
+    def rhoYe_gcm3(self, r_over_RE):
+        """
+        Return Ye * rho(r) in g/cm^3 for a vector of r/RE ∈ [0,1].
+        This allows for efficient vectorized evaluation along the neutrino trajectory.
+        Must accept scalar OR ndarray input and return same shape output.
+        """
+        ...
 
 # 1) Direct callable hook ------------------------------------------------------
 @dataclass
 class CallableEarth(EarthModel):
-    f: Callable[[float], float]  # f(r_over_RE) -> Ye*rho [g/cm^3]
-    def rhoYe_gcm3(self, r_over_RE: float) -> float:
-        r = float(np.clip(r_over_RE, 0.0, 1.0))
-        return float(self.f(r))
+    f: Callable[[float], float]   # f(r_over_RE) -> Ye*rho [g/cm^3] 
+
+    def rhoYe_gcm3(self, r_over_RE):
+        """
+        Supports scalar or ndarray inputs.
+
+        Strategy:
+        - Convert input to numpy array
+        - Apply clipping elementwise
+        - Apply user function elementwise
+        """
+        # Restrict to [0,1]
+        r = np.clip(r_over_RE, 0.0, 1.0)
+
+        # If f is not vectorized → apply it elementwise safely
+        return np.array([self.f(x) for x in np.ravel(r)]).reshape(np.shape(r))
+    
 
 
 # 2) Layered polynomial (PREM-like) -------------------------------------------
@@ -38,11 +57,11 @@ class LayeredPolyEarth(EarthModel):
       - coeffs: list of (a,b,c,d) for each layer (len L), evaluated in r = (radius / RE)
       - Ye_core, Ye_mantle: piecewise-constant Ye (or pass a custom Ye(r/RE) via ye_fn)
     """
-    xr_km: Sequence[float]
-    coeffs: Sequence[tuple]  # [(a,b,c,d), ...] one per layer
-    Ye_core: float = 0.466
-    Ye_mantle: float = 0.494
-    ye_fn: Optional[Callable[[float], float]] = None  # overrides Ye_core/mantle if given
+    xr_km:      Sequence[float]
+    coeffs:     Sequence[tuple]  # [(a,b,c,d), ...] one per layer
+    Ye_core:    float = 0.466
+    Ye_mantle:  float = 0.494
+    ye_fn:      Optional[Callable[[float], float]] = None  # overrides Ye_core/mantle if given
 
     def __post_init__(self):
         xr = np.asarray(self.xr_km, dtype=float)
@@ -51,26 +70,61 @@ class LayeredPolyEarth(EarthModel):
         if len(self.coeffs) != len(xr) - 1:
             raise ValueError("coeffs length must be len(xr_km)-1")
         self.xr = xr
-        self.RE_KM = 6371.0
+        self.RE_KM = 6371.0   # Earth radius in km; used for r/RE conversion in rhoYe_gcm3
 
-    def _layer_index(self, R_km: float) -> int:
-        # right-edge binning; clamp to last layer
-        k = int(np.searchsorted(self.xr, R_km, side="right") - 1)
-        return max(0, min(k, len(self.xr) - 2))
+    # def _layer_index(self, R_km: float) -> int:
+    #     # right-edge binning; clamp to last layer
+    #     k = int(np.searchsorted(self.xr, R_km, side="right") - 1)
+    #     return max(0, min(k, len(self.xr) - 2))
 
-    def _Ye(self, r: float) -> float:
-        if self.ye_fn is not None:
-            return float(self.ye_fn(r))
-        # default: core vs mantle split at r = 0.546 like classic PREM usage
-        return self.Ye_core if r <= 0.546 else self.Ye_mantle
+    # def _Ye(self, r: float) -> float:
+    #     if self.ye_fn is not None:
+    #         return float(self.ye_fn(r))
+    #     # default: core vs mantle split at r = 0.546 like classic PREM usage
+    #     return self.Ye_core if r <= 0.546 else self.Ye_mantle
 
-    def rhoYe_gcm3(self, r_over_RE: float) -> float:
-        r = float(np.clip(r_over_RE, 0.0, 1.0))
+    # def rhoYe_gcm3(self, r_over_RE: float) -> float:
+    #     r = float(np.clip(r_over_RE, 0.0, 1.0))
+    #     R_km = r * self.RE_KM
+    #     k = self._layer_index(R_km)
+    #     a, b, c, d = self.coeffs[k]
+    #     rho = a + b*r + c*r*r + d*r*r*r  # g/cm^3 (mass density)
+    #     return self._Ye(r) * rho
+
+
+    def _Ye(self, r):
+        """Determine electron density Ye for given r; if ye_fn is given, it overrides the core/mantle split."""
+        if self.ye_fn is not None:            
+            Ye = self.ye_fn(r)   # must support arrays        
+        else:            
+            # default: core vs mantle split at r = 0.546 like classic PREM usage
+            r_thr = 0.546
+            Ye = np.where(r <= r_thr, self.Ye_core, self.Ye_mantle)
+
+        return Ye
+    
+
+    def rhoYe_gcm3(self, r_over_RE):
+        """Vectorised version of rhoYe_gcm3 for array inputs. Computes Ye*rho for each r/RE in the input array."""
+        # Restrict to [0,1] and convert to km
+        r = np.clip(r_over_RE, 0.0, 1.0)
         R_km = r * self.RE_KM
-        k = self._layer_index(R_km)
-        a, b, c, d = self.coeffs[k]
+
+        # vectorised layer index calculation; right-edge binning; clamp to last layer
+        k = np.searchsorted(self.xr, R_km, side="right") - 1
+        k = np.clip(k, 0, len(self.xr) - 2)
+
+        # Get polynomial coefficients for each r; shape (len(r), 4)
+        coeffs = np.array(self.coeffs)
+        a = coeffs[k, 0]
+        b = coeffs[k, 1]
+        c = coeffs[k, 2]
+        d = coeffs[k, 3]
+
         rho = a + b*r + c*r*r + d*r*r*r  # g/cm^3 (mass density)
+
         return self._Ye(r) * rho
+    
 
 # 3) Tabulated profile with spline --------------------------------------------
 class TabulatedEarth(EarthModel):
@@ -91,12 +145,58 @@ class TabulatedEarth(EarthModel):
         self.r = r[order]
         self.y = y[order]
 
-    def rhoYe_gcm3(self, r_over_RE: float) -> float:
-        r = float(np.clip(r_over_RE, 0.0, 1.0))
-        # simple, safe interpolation; replace with scipy PchipInterpolator if you like
-        return float(np.interp(r, self.r, self.y))
+    
+    def rhoYe_gcm3(self, r_over_RE):        
+        """
+        np.interp already supports arrays. No scalar casting.     
+        """        
+        r = np.clip(r_over_RE, 0.0, 1.0) 
+        # simple, safe interpolation; replace with scipy PchipInterpolator if you like       
+        return np.interp(r, self.r, self.y)
+    
+
+
+# 4) Pre-defined PREM --------------------------------------------
+        
+xr_km_PREM = [0., 1221.5, 3480.0, 5701.0, 5771.0, 5971.0, 6151.0,
+               6346.6, 6356.0, 6368.0, 6371.0, 6371.0 + 15.0]  # PREM boundaries
+coeffs_PREM = [
+    (13.0885,  0.0,    -8.8381,  0.0),     # layer 1: a,b,c,d in r = R/RE
+    (12.5815, -1.2638, -3.6426, -5.528),   # layer 2
+    (7.9565,  -6.4761,  5.5283, -3.0807),  # ...
+    (5.3197,  -1.4836,  0.0,      0.0),
+    (11.2494, -8.0298,  0.0,      0.0),
+    (7.1089,  -3.8045,  0.0,      0.0),
+    (2.6910,   0.6924,  0.0,      0.0),
+    (2.9,      0.0,     0.0,      0.0),
+    (2.6,      0.0,     0.0,      0.0),
+    (1.02,     0.0,     0.0,      0.0),
+    (0.000,    0.0,     0.0,      0.0),
+]
+
+# Predefined PREM model instance
+PREMmodel = LayeredPolyEarth(xr_km=xr_km_PREM, coeffs=coeffs_PREM, Ye_core=0.466, Ye_mantle=0.494)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class EarthProbEvolve:
+    """
+    Evolve neutrino density matrix through Earth matter for 
+    given oscillation parameters, NSI model, and Earth density profile.
+    """
     def __init__(self,  model, osc_params=osc.osc_params_best, 
                  earthmodel: Optional[EarthModel] = None, Nst: int = 50, Nav: int = 50):
         self.osc_params = osc_params
@@ -149,9 +249,9 @@ class EarthProbEvolve:
         r_over_RE   = (np.sqrt(np.maximum(0.0, 1 + xi**2 - 2 * xi * root_common))
                     / (norm * RE_KM))           # (Nst, Nav+1)
 
-        # rhoYe evaluation — np.vectorize if earthmodel only accepts scalars
-        rhoYe = np.vectorize(self.earthmodel.rhoYe_gcm3)(r_over_RE)  # (Nst, Nav+1)
-        Vav   = rhoYe.mean(axis=1)                # (Nst,)
+        # rhoYe evaluation — earthmodel must accepts ndarray input and return array output for this to be efficient
+        rhoYe = self.earthmodel.rhoYe_gcm3(r_over_RE)   # (Nst, Nav+1)
+        Vav   = rhoYe.mean(axis=1)                      # (Nst,)
 
         return t1, dxs, Vav
 
@@ -310,23 +410,5 @@ class EarthProbEvolveOld:
 
         return rho_earth 
 
-# 4) Pre-defined PREM --------------------------------------------
-        
-xr_km = [0., 1221.5, 3480.0, 5701.0, 5771.0, 5971.0, 6151.0,
-               6346.6, 6356.0, 6368.0, 6371.0, 6371.0 + 15.0]  # your boundaries
-coeffs = [
-    (13.0885, 0.0, -8.8381, 0.0),   # layer 1: a,b,c,d in r = R/RE
-    (12.5815, -1.2638, -3.6426, -5.528),  # layer 2
-    (7.9565,  -6.4761,  5.5283,  -3.0807),  # ...
-    (5.3197,  -1.4836,  0.0,  0.0),
-    (11.2494,  -8.0298,  0.0,  0.0),
-    (7.1089,  -3.8045,  0.0,  0.0),
-    (2.6910,   0.6924,  0.0,  0.0),
-    (2.9,      0.0,  0.0,  0.0),
-    (2.6,    0.0,  0.0,  0.0),
-    (1.02,    0.0,  0.0,  0.0),
-    (0.000,    0.0,  0.0,  0.0),
-]
-PREMmodel = LayeredPolyEarth(xr_km=xr_km, coeffs=coeffs,
-                             Ye_core=0.466, Ye_mantle=0.494)
+
         
