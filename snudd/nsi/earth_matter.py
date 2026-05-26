@@ -16,8 +16,6 @@ RE_KM, ATM_KM = 6371.0, 15.0
 
 # ---------- Interfaces ----------
 class EarthModel(Protocol):
-    # def rhoYe_gcm3(self, r_over_RE: float) -> float:
-    #     """Return Ye * rho(r) in g/cm^3 at r/RE ∈ [0,1]."""
     def rhoYe_gcm3(self, r_over_RE):
         """
         Return Ye * rho(r) in g/cm^3 for a vector of r/RE ∈ [0,1].
@@ -72,6 +70,7 @@ class LayeredPolyEarth(EarthModel):
         self.xr = xr
         self.RE_KM = 6371.0   # Earth radius in km; used for r/RE conversion in rhoYe_gcm3
 
+    # NOTE: The following methods are not currently used in the vectorized rhoYe_gcm3, but are kept for reference and potential use in non-vectorized contexts.
     # def _layer_index(self, R_km: float) -> int:
     #     # right-edge binning; clamp to last layer
     #     k = int(np.searchsorted(self.xr, R_km, side="right") - 1)
@@ -254,39 +253,64 @@ class EarthProbEvolve:
         Vav   = rhoYe.mean(axis=1)                      # (Nst,)
 
         return t1, dxs, Vav
+    
 
+    def _matmul_scan(self, M):
+        """
+        Perform a cumulative product (scan) of the M matrices along the Nst axis.
+        M has shape (N_E, Nst, 3, 3) and we want to compute S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1] for each Energy n.
+        This is done in O(Nst * log(Nst)) time using a divide-and-conquer approach.
+        """
+        # M: (N, Nst, 3, 3)
+        while M.shape[1] > 1:
+            # If odd number of slices, save the last one to multiply back later
+            if M.shape[1] % 2 == 1:
+                last = M[:, -1:] # shape (N, 1, 3, 3)
+                M = M[:, :-1] # shape (N, Nst-1, 3, 3)
+            else:
+                last = None
+            # Multiply pairs of adjacent slices
+            M = np.matmul(M[:, 0::2], M[:, 1::2])
+
+            if last is not None:
+                M = np.concatenate([M, last], axis=1)
+
+        return M[:, 0]
+    
 
     def S_matrix_batch(self, enus_GeV: np.ndarray, ceta: float) -> np.ndarray:
         """
-        Compute the (N, 3, 3) array of S-matrices for N energies at fixed ceta.
+        Compute the (N_E, 3, 3) array of S-matrices for N_E energies at fixed ceta.
         Replaces the per-energy loop over S_matrix().
         """
-        enus = np.asarray(enus_GeV, dtype=float)
-        N    = len(enus)
+        # Neutrino energies must be in GeV for the Hamiltonian construction; ensure correct type and shape
+        Enus = np.asarray(enus_GeV, dtype=float)
+        N_E  = len(Enus)
 
+        # For large cos(nadir)>= pi/2 (no matter crossing), return identity matrices immediately
         if np.arccos(ceta) >= np.pi / 2:
-            return np.broadcast_to(np.eye(3, dtype=np.complex128), (N, 3, 3)).copy()
+            return np.broadcast_to(np.eye(3, dtype=np.complex128), (N_E, 3, 3)).copy()
 
         _, dxs, Vav = self._precompute_slices(ceta)    # (Nst,), (Nst,)
 
         # ------------------------------------------------------------------ #
-        # Build Hv(E) for all N energies at once
+        # Build Hv(E) for all N_E energies at once
         # Hv[n] = U @ diag(0, dm12/2E, dm31/2E) @ U†
         # ------------------------------------------------------------------ #
         U    = osc.UPMNS(self.osc_params)
         dm12 = self.osc_params.delta_m12
         dm31 = self.osc_params.delta_m31
 
-        diag_vals          = np.zeros((N, 3))
-        diag_vals[:, 1]    = dm12 / (2 * enus)
-        diag_vals[:, 2]    = dm31 / (2 * enus)
+        diag_vals          = np.zeros((N_E, 3))
+        diag_vals[:, 1]    = dm12 / (2 * Enus)
+        diag_vals[:, 2]    = dm31 / (2 * Enus)
 
         # Hv[n,i,j] = Σ_a  U[i,a] · diag_vals[n,a] · U*[j,a]
-        Hv = np.einsum('ia,na,ja->nij', U, diag_vals, U.conj())   # (N, 3, 3)
+        Hv = np.einsum('ia,na,ja->nij', U, diag_vals, U.conj())   # (N_E, 3, 3)
 
         # ------------------------------------------------------------------ #
         # Full Hamiltonian: H[n,k] = Hv[n] + s2GFNa·Vav[k]·Vf
-        # shape: (N, Nst, 3, 3)
+        # shape: (N_E, Nst, 3, 3)
         # ------------------------------------------------------------------ #
         Vf = self._V_matrix()                                        # (3, 3)
         H  = (Hv[:, None, :, :]
@@ -295,43 +319,55 @@ class EarthProbEvolve:
         # ------------------------------------------------------------------ #
         # Batched eigendecomposition — one call for all N·Nst matrices
         # ------------------------------------------------------------------ #
-        Em, Um = np.linalg.eigh(H.reshape(N * self.Nst, 3, 3))
-        Em = Em.reshape(N, self.Nst, 3)          # eigenvalues
-        Um = Um.reshape(N, self.Nst, 3, 3)       # eigenvectors (columns)
+        Em, Um = np.linalg.eigh(H.reshape(N_E * self.Nst, 3, 3))
+        Em = Em.reshape(N_E, self.Nst, 3)          # eigenvalues
+        Um = Um.reshape(N_E, self.Nst, 3, 3)       # eigenvectors (columns)
 
         # ------------------------------------------------------------------ #
         # Phase factors: exp(-i · Em · tRad · dx_k)
         # ------------------------------------------------------------------ #
-        phase = np.exp(-1j * Em * self.tRad * dxs[None, :, None])   # (N, Nst, 3)
+        phase = np.exp(-1j * Em * self.tRad * dxs[None, :, None])   # (N_E, Nst, 3)
 
         # Transfer matrices: M[n,k] = Um[n,k] @ diag(phase[n,k]) @ Um†[n,k]
         # M[n,k,i,j] = Σ_a  Um[n,k,i,a] · phase[n,k,a] · Um*[n,k,j,a]
-        M = np.einsum('nkia,nka,nkja->nkij', Um, phase, Um.conj())  # (N, Nst, 3, 3)
+        M = np.einsum('nkia,nka,nkja->nkij', Um, phase, Um.conj())  # (N_E, Nst, 3, 3)
 
         # ------------------------------------------------------------------ #
         # Sequential product over slices — only Nst iterations, each a
-        # batched (N, 3, 3) matmul
+        # batched (N_E, 3, 3) matmul
         # ------------------------------------------------------------------ #
-        S = np.eye(3, dtype=np.complex128)[None].repeat(N, axis=0)   # (N, 3, 3)
+        S = np.eye(3, dtype=np.complex128)[None].repeat(N_E, axis=0)   # (N_E, 3, 3)
+        # Sequential matrix product over slices; S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1]
         for k in range(self.Nst):
-            S = np.matmul(S, M[:, k])
+            S = np.einsum('nij,njk->nik', S, M[:, k])
 
-        return S                                                      # (N, 3, 3)
+        return S                                                      # (N_E, 3, 3)
+
+        # return self._matmul_scan(M)  # (N_E, 3, 3)
 
 
     def evolve_rhosolar(self, rho_solar, enus_GeV, ceta):
         """
-        rho_solar : (N, 3, 3) complex
-        enus_GeV  : (N,) energies
+        rho_solar : (N_E, 3, 3) complex
+        enus_GeV  : (N_E,) energies
         ceta      : scalar cos(nadir)
-        Returns rho_earth : (N, 3, 3)
+        Returns rho_earth : (N_E, 3, 3)
         """
-        S    = self.S_matrix_batch(np.asarray(enus_GeV), ceta)   # (N, 3, 3)
+        S    = self.S_matrix_batch(np.asarray(enus_GeV), ceta)   # (N_E, 3, 3)
         Sdag = np.swapaxes(S.conj(), -1, -2)
         return np.matmul(np.matmul(S, rho_solar), Sdag)
 
 
+
+
+
+
+
+
+
+
 class EarthProbEvolveOld:
+    """Old version of EarthProbEvolve with per-energy loop and no precomputation; kept for reference."""
     def __init__(self,  model, osc_params=osc.osc_params_best, 
                  earthmodel: Optional[EarthModel] = None, Nst: int = 50, Nav: int = 50):
         self.osc_params = osc_params
@@ -390,22 +426,22 @@ class EarthProbEvolveOld:
     
     def evolve_rhosolar(self, rho_solar, enus_GeV, ceta):
         """
-        rho_solar_stack: (N,3,3) complex array  [your solar density matrices at Earth surface]
-        enus_GeV       : (N,) energies
+        rho_solar_stack: (N_E,3,3) complex array  [your solar density matrices at Earth surface]
+        enus_GeV       : (N_E,) energies
         ceta           : scalar cos(nadir)
         propagator     : an object with S_matrix(E, ceta) -> (3,3) complex
 
         Returns:
-        rho_earth_stack : (N,3,3) complex
+        rho_earth_stack : (N_E,3,3) complex
         """
         # 1) build S(E) for all energies
         S_list = [self.S_matrix(E, ceta) for E in enus_GeV]
-        S = np.stack(S_list, axis=0)                    # (N,3,3)
-        Sdag = np.swapaxes(S.conj(), -1, -2)            # (N,3,3)
+        S = np.stack(S_list, axis=0)                    # (N_E,3,3)
+        Sdag = np.swapaxes(S.conj(), -1, -2)            # (N_E,3,3)
 
         # 2) batch multiply: S ρ S†   (use matmul with batch dims)
-        tmp = np.matmul(S, rho_solar)             # (N,3,3)
-        rho_earth = np.matmul(tmp, Sdag)                # (N,3,3)
+        tmp = np.matmul(S, rho_solar)             # (N_E,3,3)
+        rho_earth = np.matmul(tmp, Sdag)          # (N_E,3,3)
 
 
         return rho_earth 
