@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import interpolate
-from nuddnsi.config import get_data
+from snudd.config import get_data
 
 
 E_low_ext = 1e-2

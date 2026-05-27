@@ -1,8 +1,7 @@
 import numpy as np
 from scipy import interpolate
-from scipy.integrate import trapz
 
-from nuddnsi.config import get_data
+from snudd.config import trapezoid, get_data
 
 
 E_R_total, total_bkg = np.loadtxt(get_data("exps/xnt/bkg_xnt.txt")).T
@@ -36,4 +35,4 @@ if __name__ == "__main__":
     plt.loglog(E_Rs * 1e6, total_bkg_spec_fn(E_Rs))
     plt.show()
 
-    print(trapz(total_bkg_spec_fn(E_Rs), E_Rs*1e6))
+    print(trapezoid(total_bkg_spec_fn(E_Rs), E_Rs*1e6))

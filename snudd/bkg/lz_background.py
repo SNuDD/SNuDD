@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import interpolate
 
-from nuddnsi.config import get_data
+from snudd.config import get_data
 
 conv2ty = 365.25 * 1000
 E_low_ext = 1e-2  # Energy to extend everything to in keVee

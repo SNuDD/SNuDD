@@ -2,6 +2,7 @@
 import warnings
 
 import numpy as np
+from snudd.config import trapezoid
 from snudd.efficiencies import Efficiency, efficiency_lz_nr, efficiency_lz_er, efficiency_xnt_nr, efficiency_xnt_er
 from snudd.quenching import Quenching, quenching_xe, quenching_electron
 from scipy.special import erf
@@ -59,11 +60,11 @@ class Convolver:
 
     def convolved_binned_rate(self, E_1, E_2):
         """Return the convolved rate within a bin with edges E_1 < E_2."""
-        return np.trapz(self._energy_response_integrand(E_1, E_2), self._E_primes_ee * 1e6)
+        return trapezoid(self._energy_response_integrand(E_1, E_2), self._E_primes_ee * 1e6)
 
     def convolve_spectrum(self, E_R):
         """Return convolved spectrum at E_R"""
-        convolution = np.array([np.trapz(self._convolution_integrand(E), self._E_primes_ee) for E in E_R])
+        convolution = np.array([trapezoid(self._convolution_integrand(E), self._E_primes_ee) for E in E_R])
         return spec_ee2nr(E_R, convolution, self.quenching)
 
     def _energy_response_function(self, E_ee, E_1, E_2):

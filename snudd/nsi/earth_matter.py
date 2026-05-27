@@ -5,8 +5,36 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, Callable, Sequence, Optional
-from snudd.nsi import flux_dists, oscillation as osc
+from snudd.nsi import oscillation as osc
+
+# --- Backend selection (NumPy or JAX) ---
+try:
+    # must be BEFORE jax import
+    import os
+    # force CPU backend to avoid errors with unsupported complex operations on GPU/TPU; 
+    # remove this line if you want to use JAX on GPU/TPU and ensure your JAX version supports complex numbers on that backend
+    os.environ["JAX_PLATFORM_NAME"] = "cpu" 
+    import jax.numpy as jnp
+    from jax import jit, lax
+    USE_JAX = True
+    print("JAX is available. Using JAX for Earth matter evolution.")
+except ImportError:
+    import numpy as jnp  # fallback alias
+    USE_JAX = False
+
+# Keep regular numpy too
 import numpy as np
+
+
+
+
+def jitify(f):
+    """Utility to JIT-compile a function if JAX is available, otherwise return it unchanged."""
+    return jit(f) if USE_JAX else f
+
+
+
+
 
 # ---------- Constants (natural units) ----------
 CF = 5.06773e18         # km -> GeV^-1
@@ -167,6 +195,66 @@ PREMmodel = LayeredPolyEarth(xr_km=xr_km_PREM, coeffs=coeffs_PREM, Ye_core=0.466
 
 
 
+def _core_evolution_kernel(H, dxs, tRad):
+    """
+    Core matter Hamiltonian eigen-decomposition and evolution kernel.
+     - H: (N_E, Nst, 3, 3) array of Hamiltonians for each energy and slice
+     - dxs: (Nst,) array of slice widths in units of tRad
+     - tRad: total path length in units of tRad
+    Returns:
+     - S: (N_E, 3, 3) array of final evolution matrices S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1]
+    Note: this function is JIT-compiled with JAX if available, otherwise runs with NumPy. 
+    """
+
+    # ------------------------------------------------------------------ #
+    # Batched eigendecomposition — one call for all N·Nst matrices
+    # Returns (N_E, Nst, 3) eigenvalues and (N_E, Nst, 3, 3) eigenvectors
+    # ------------------------------------------------------------------ #
+    Em, Um = jnp.linalg.eigh(H)                 
+
+    # ------------------------------------------------------------------ #
+    # Phase factors: exp(-i · Em · tRad · dx_k)
+    # Shape: (N_E, Nst, 3)
+    # ------------------------------------------------------------------ #
+    phase = jnp.exp(-1j * Em * tRad * dxs[None, :, None])
+
+    # Build evolution matrices: M[n,k] = Um[n,k] @ diag(phase[n,k]) @ Um†[n,k]
+    # M[n,k,i,j] = Σ_a  Um[n,k,i,a] · phase[n,k,a] · Um*[n,k,j,a]
+    # Shape M: (N, Nst, 3, 3)
+    M = jnp.einsum('nkia,nka,nkja->nkij', Um, phase, jnp.conj(Um))
+
+    # --- Multiply evolution matrices along slices ---
+    # This is the bottleneck step. We want S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1].
+    # A naive loop is O(N_E * Nst), but we can do better with a parallel scan (prefix product) in O(N_E * log(Nst)) time.
+    if USE_JAX:
+        # Fast associative scan (parallel)
+        def matmul(a, b):
+            return a @ b
+
+        S = lax.associative_scan(matmul, M, axis=1)
+        return S[:, -1] # the last element of the scan is the full product
+
+    else:
+        # Fallback: your existing scan
+        # If odd number of slices, save the last one to multiply back later
+        while M.shape[1] > 1:
+            if M.shape[1] % 2 == 1:
+                last = M[:, -1:] # shape (N, 1, 3, 3)
+                M    = M[:, :-1] # shape (N, Nst-1, 3, 3)
+            else:
+                last = None
+                
+            # Multiply pairs of adjacent slices
+            M = np.matmul(M[:, 0::2], M[:, 1::2])
+
+            if last is not None:
+                M = np.concatenate([M, last], axis=1)
+            
+        return M[:, 0]
+
+
+# JIT-compile the core evolution kernel for speed if JAX is available
+_core_evolution_kernel = jitify(_core_evolution_kernel)
 
 
 
@@ -211,7 +299,7 @@ class EarthProbEvolve:
         k      = np.arange(self.Nst)
         xmins  = t1 * k       / self.Nst          # (Nst,)
         xmaxs  = t1 * (k + 1) / self.Nst          # (Nst,)
-        dxs    = xmaxs - xmins                     # (Nst,)
+        dxs    = xmaxs - xmins                    # (Nst,)
 
         # Sample points inside each slice: shape (Nst, Nav+1)
         l  = np.arange(self.Nav + 1)
@@ -229,28 +317,6 @@ class EarthProbEvolve:
 
         return t1, dxs, Vav
     
-
-    def _matmul_scan(self, M):
-        """
-        Perform a cumulative product (scan) of the M matrices along the Nst axis.
-        M has shape (N_E, Nst, 3, 3) and we want to compute S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1] for each Energy n.
-        This is done in O(Nst * log(Nst)) time using a divide-and-conquer approach.
-        """
-        # M: (N, Nst, 3, 3)
-        while M.shape[1] > 1:
-            # If odd number of slices, save the last one to multiply back later
-            if M.shape[1] % 2 == 1:
-                last = M[:, -1:] # shape (N, 1, 3, 3)
-                M = M[:, :-1]    # shape (N, Nst-1, 3, 3)
-            else:
-                last = None
-            # Multiply pairs of adjacent slices
-            M = np.matmul(M[:, 0::2], M[:, 1::2])
-
-            if last is not None:
-                M = np.concatenate([M, last], axis=1)
-
-        return M[:, 0]
     
 
     def S_matrix_batch(self, enus_GeV: np.ndarray, cnadir: float) -> np.ndarray:
@@ -272,7 +338,6 @@ class EarthProbEvolve:
         # Build Hv(E) for all N_E energies at once
         # Hv[n] = U @ diag(0, dm12/2E, dm31/2E) @ U†
         # ------------------------------------------------------------------ #
-        # U    = osc.UPMNS(self.osc_params)
         U      = self.U
         U_conj = self.U_conj    
         dm12   = self.osc_params.delta_m12
@@ -292,35 +357,21 @@ class EarthProbEvolve:
         Vf = self._V_matrix()                                        # (3, 3)
         H  = (Hv[:, None, :, :]
             + (s2GFNa * Vav)[None, :, None, None] * Vf[None, None, :, :])
+        
 
         # ------------------------------------------------------------------ #
-        # Batched eigendecomposition — one call for all N·Nst matrices
+        # Compute matter evolution S-matrices for all energies at once using the core evolution kernel.
         # ------------------------------------------------------------------ #
-        Em, Um = np.linalg.eigh(H.reshape(N_E * self.Nst, 3, 3))
-        Em = Em.reshape(N_E, self.Nst, 3)          # eigenvalues
-        Um = Um.reshape(N_E, self.Nst, 3, 3)       # eigenvectors (columns)
+        # Switch to backend array if JAX is enabled
+        if USE_JAX:
+            H_backend   = jnp.array(H)
+            dxs_backend = jnp.array(dxs)
+        # Otherwise, keep as NumPy arrays
+        else:
+            H_backend   = H
+            dxs_backend = dxs
 
-        # ------------------------------------------------------------------ #
-        # Phase factors: exp(-i · Em · tRad · dx_k)
-        # ------------------------------------------------------------------ #
-        phase = np.exp(-1j * Em * self.tRad * dxs[None, :, None])   # (N_E, Nst, 3)
-
-        # Transfer matrices: M[n,k] = Um[n,k] @ diag(phase[n,k]) @ Um†[n,k]
-        # M[n,k,i,j] = Σ_a  Um[n,k,i,a] · phase[n,k,a] · Um*[n,k,j,a]
-        M = np.einsum('nkia,nka,nkja->nkij', Um, phase, Um.conj())  # (N_E, Nst, 3, 3)
-
-        # ------------------------------------------------------------------ #
-        # Sequential product over slices — only Nst iterations, each a
-        # batched (N_E, 3, 3) matmul
-        # ------------------------------------------------------------------ #
-        return self._matmul_scan(M)  # (N_E, 3, 3)
-    
-        # S = np.eye(3, dtype=np.complex128)[None].repeat(N_E, axis=0)   # (N_E, 3, 3)
-        # # Sequential matrix product over slices; S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1]
-        # for k in range(self.Nst):
-        #     S = np.einsum('nij,njk->nik', S, M[:, k])
-
-        # return S                                                      # (N_E, 3, 3)
+        return np.array(_core_evolution_kernel(H_backend, dxs_backend, self.tRad))
 
         
 
@@ -339,6 +390,17 @@ class EarthProbEvolve:
 
 
 
+
+
+
+
+
+######################################################################################################
+#
+#                                  OLD CODE BELOW, KEPT FOR REFERENCE
+#                               (not used in the current implementation)    
+#
+######################################################################################################
 
 
 
@@ -425,6 +487,3 @@ class EarthProbEvolveOld:
 
 
         return rho_earth 
-
-
-        

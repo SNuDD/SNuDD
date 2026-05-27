@@ -7,6 +7,7 @@ import typing
 import numpy as np
 from scipy.interpolate import interp1d
 from snudd import config
+from snudd.config import trapezoid
 from snudd.nsi.nsi_probabilities import DensityMatrixEarthCalculator, interp_density_sm
 
 if typing.TYPE_CHECKING:
@@ -68,7 +69,7 @@ class SpectrumTrace():
             matrix_mult = matrix_mult.swapaxes(0,1)
 
             integrands = nu_fluxes * matrix_mult.trace(axis1=-2, axis2=-1).T
-            rates = N_targets * np.trapz(integrands, E_nus.T) * config.rate_conv * self.cnadir_weights[icnadir]
+            rates = N_targets * trapezoid(integrands, E_nus.T) * config.rate_conv * self.cnadir_weights[icnadir]
             integrated_cnadir_array[icnadir] = rates
         integrated_total = np.sum(integrated_cnadir_array, axis=0)
         return np.where(integrated_total < 0, 0, integrated_total)
