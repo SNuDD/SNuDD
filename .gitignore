@@ -1,3 +1,4 @@
 snudd.egg-info/
+.DS_Store
 .ipynb_checkpoints/
 __pycache__/
