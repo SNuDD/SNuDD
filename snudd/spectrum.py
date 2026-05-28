@@ -18,6 +18,9 @@ if typing.TYPE_CHECKING:
 Enu_points = 250  
 
 
+
+
+
 class SpectrumTrace():
     """Target (nucleus or electron) spectrum."""
 
@@ -30,12 +33,40 @@ class SpectrumTrace():
         self.nu_density_elements = interp_density_sm
         self.cnadirs = [-1]
         self.cnadir_weights = [1]
+        self._cache_energy = {}     # caches E_nus + flux for each source to avoid repeated interpolation of the flux for each spectrum call, which can be expensive for large scans.
 
     def nu_minimum_energy(self, E_R):
         """Return neutrino minimum energy given a recoil in GeV."""
         E_nu_min = 1. / 2. * (E_R + np.sqrt(E_R ** 2 + 2 * self.target.mass * E_R))
 
         return E_nu_min
+    
+    def _get_energy_cache(self, nu, E_R):
+        """
+        Cache (E_nus, flux) for given source and E_R.
+        Saves computation time by avoiding repeated interpolation of the flux for each spectrum call.
+        """
+        key = (nu, hash(E_R.tobytes()))
+
+        if key not in self._cache_energy:
+
+            nu_flux_fn = config.nu_flux_interp[nu]
+            E_nu_min = self.nu_minimum_energy(E_R)
+
+            # Clip once here
+            Emin = nu_flux_fn.x.min() / 1000
+            Emax = nu_flux_fn.x.max() / 1000
+            E_nu_min = np.clip(E_nu_min, Emin, (1 - 1e-6) * Emax)
+
+            # Build grid ONLY ONCE
+            E_nus = np.geomspace(E_nu_min, Emax, Enu_points)
+
+            # Flux
+            nu_fluxes = nu_flux_fn(E_nus * 1000).T * 1e3
+            self._cache_energy[key] = (E_nus, nu_fluxes)
+
+        return self._cache_energy[key]
+    
     
     def _rate_nu(self, E_R, nu):
         """Return differential rate for a neutrino source. Overridden for each breakdown by subclasses."""
@@ -49,19 +80,7 @@ class SpectrumTrace():
             E_nu_mono  = config.E_nus[nu][0] / 1000 # Mono energy in GeV, scalar
             E_nus_mins = (E_nu_min < E_nu_mono) # Check if mono energy is above minimum energy; if not, return zero
             dsigma_mat = self.target.cross_section_flavour(E_R, E_nu_mono) # Shape (N_E, 3, 3) 
-            v_flux = np.array([[config.nu_flux[nu]]]) # Mono flux in per GeV, shape (1, 1) to allow broadcasting
-            
-            # integrated_cnadir_array = np.zeros(shape=(len(self.cnadirs), len(E_R)))
-            # for icnadir in range(len(self.cnadirs)):
-            #     density_mat = self.density_calc.matrix_from_elements(density_elements_flux[icnadir](E_nu_mono)) # Shape (3, 3)
-            #     # matmul uses broadcasting on arrays of matrices, so we can input density_mat of shape (3, 3) and dsigma_mat of shape (N_E, 3, 3) 
-            #     # and it will output an array of shape (N_E, 3, 3) where each (3, 3) matrix is the product of density_mat with the corresponding (3, 3) matrix in dsigma_mat.
-            #     matrix_mult = np.matmul(density_mat, dsigma_mat) # Shape (N_E, 3, 3) after matmul, but we only have one E_nu, so effectively (3, 3)
-            #     integrated = v_flux * matrix_mult.trace(axis1=-2, axis2=-1) * self.cnadir_weights[icnadir] # Shape (N_E, 1) after trace, but effectively scalar since we only have one E_nu
-            #     integrated_cnadir_array[icnadir] = integrated
-            # integrated_total = np.sum(integrated_cnadir_array, axis=0)
-            # return self.target.number_targets_mass(E_R) * integrated_total * config.rate_conv * E_nus_mins
-        
+            v_flux = np.array([[config.nu_flux[nu]]]) # Mono flux in per GeV, shape (1, 1) to allow broadcasting        
 
             density_eff = 0
             # Compute effective density matrix by summing over cnadir angles with corresponding weights
@@ -72,81 +91,35 @@ class SpectrumTrace():
             # ---- Perform matrix product and trace as einsum instead of matmul + trace ----
             # No integration needed for monoenergetic sources, so we just multiply flux by trace to get rate at mono energy, 
             # and then check if mono energy is above minimum energy to return zero if not.
-            integrated = v_flux * np.einsum('ij,rij->r', density_eff, dsigma_mat)
-            
-            return  self.target.number_targets_mass(E_R) * integrated * config.rate_conv * E_nus_mins
-
-        # # CONTINUOUS neutrino sources (e.g. 8B) 
-        # nu_flux_fn = config.nu_flux_interp[nu] # Interpolating function for neutrino flux as a function of energy for given source nu, takes input in MeV and outputs in per MeV, so we will convert to GeV and per GeV when we use it below
-        # # We need to check that the minimum neutrino energy is within the range of the interpolating function, otherwise we will get NaNs. 
-        # # If it is outside the range, we can set it to the minimum or maximum energy of the interpolating function, 
-        # # and then later we will multiply by zero if the mono energy is above the minimum energy to get zero rate as expected.
-        # np.putmask(E_nu_min, E_nu_min < nu_flux_fn.x.min() / 1000, nu_flux_fn.x.min() / 1000)
-        # np.putmask(E_nu_min, E_nu_min > nu_flux_fn.x.max() / 1000, (1 - 1e-6) * nu_flux_fn.x.max() / 1000)
-        # E_nus = np.geomspace(E_nu_min, nu_flux_fn.x.max() / 1000, Enu_points)  # The relevant neutrino energies to integrate (in GeV)
-        # nu_fluxes = nu_flux_fn(E_nus * 1000).T * 1e3  # Convert to per GeV
-        # N_targets = self.target.number_targets_mass(E_R)
-
-        # integrated_cnadir_array = np.zeros(shape=(len(self.cnadirs), len(E_R)))
-        # E_R = np.array([E_R])
-        # dsigma_mat = self.target.cross_section_flavour(E_R, E_nus)
-        # dsigma_mat = dsigma_mat.swapaxes(0,1)
-        # for icnadir in range(len(self.cnadirs)):
-        #     density_mat = self.density_calc.matrix_from_elements(density_elements_flux[icnadir](E_nus))
-        #     density_mat = np.rollaxis(density_mat, 3)
-        #     matrix_mult = np.matmul(density_mat, dsigma_mat)
-        #     matrix_mult = matrix_mult.swapaxes(0,1)
-
-        #     integrands = nu_fluxes * matrix_mult.trace(axis1=-2, axis2=-1).T
-        #     rates = N_targets * trapezoid(integrands, E_nus.T) * config.rate_conv * self.cnadir_weights[icnadir]
-        #     integrated_cnadir_array[icnadir] = rates
-        # integrated_total = np.sum(integrated_cnadir_array, axis=0)
-        # return np.where(integrated_total < 0, 0, integrated_total)
-    
+            integrated = v_flux * np.einsum('ij,rij->r', density_eff, dsigma_mat) 
+            return  self.target.number_targets_mass(E_R) * integrated * config.rate_conv * E_nus_mins    
 
         # CONTINUOUS neutrino sources (e.g. 8B) 
-        nu_flux_fn = config.nu_flux_interp[nu]
-        # We need to check that the minimum neutrino energy is within the range of the interpolating function, otherwise we will get NaNs. 
-        # If it is outside the range, we can set it to the minimum or maximum energy of the interpolating function, 
-        # and then later we will multiply by zero if the mono energy is above the minimum energy to get zero rate as expected.
-        np.putmask(E_nu_min, E_nu_min < nu_flux_fn.x.min() / 1000, nu_flux_fn.x.min() / 1000)
-        np.putmask(E_nu_min, E_nu_min > nu_flux_fn.x.max() / 1000, (1 - 1e-6) * nu_flux_fn.x.max() / 1000)
-        # The relevant neutrino energies to integrate (in GeV)
-        E_nus = np.geomspace(E_nu_min, nu_flux_fn.x.max() / 1000, Enu_points) # Shape (N_Enu, N_ER) 
-
-        nu_fluxes = nu_flux_fn(E_nus * 1000).T * 1e3 # Convert to per GeV; shape (N_ER, N_Enu) after transpose
-
+        # ---- Neutrino energy grid (in GeV) ----
+        E_nus, nu_fluxes = self._get_energy_cache(nu, E_R)
         E_R = np.array([E_R]) # Make E_R an array to allow broadcasting with E_nus
 
         # Compute cross section matrix for each E_R and E_nu; shape (N_Enu, N_ER, 3, 3)
-        dsigma_mat = self.target.cross_section_flavour(E_R, E_nus)
+        dsigma_mat = self.target.cross_section_flavour(E_R, E_nus) # (E_nu, E_R, 3, 3)
         dsigma_mat = dsigma_mat.swapaxes(0, 1)  # (E_R, E_nu, 3, 3)
 
         # ---- Build weighted effective density ----
-        density_all = []
+        density_eff = 0
         # Compute effective density matrix by summing over cnadir angles with corresponding weights
         for icnadir in range(len(self.cnadirs)):
             density_nad = self.density_calc.matrix_from_elements(density_elements_flux[icnadir](E_nus))  # Shape (E_nu, 3, 3, E_R) )
-            density_nad = np.transpose(density_nad, (3, 0, 1, 2)) # (ER, Enu, 3, 3)
-            density_all.append(density_nad * self.cnadir_weights[icnadir])
-
-        density_all = np.stack(density_all)        # (Nc, E_R, E_nu, 3, 3)
-        density_eff = np.sum(density_all, axis=0)  # (E_R, E_nu, 3, 3)
+            density_eff += density_nad * self.cnadir_weights[icnadir]
+        density_eff = np.transpose(density_eff, (3, 0, 1, 2)) # Get into correct shape (ER, Enu, 3, 3)
 
         # ---- Perform matrix product and trace as einsum instead of matmul + trace ----
-        traces = np.einsum('reij,reji->re', density_eff, dsigma_mat, optimize=True) # Shape (E_R, E_nu) after einsum
+        traces = np.einsum('reij,reji->re', density_eff, dsigma_mat) # Shape (E_R, E_nu) after einsum
 
         # ---- Single integration over averaged density ----
         integrands = nu_fluxes * traces # Shape (E_R, E_nu) after multiplication, ready for integration
-
         rates = self.target.number_targets_mass(E_R) * trapezoid(integrands, E_nus.T) * config.rate_conv
+
         rates[rates < 0] = 0. # Set any negative rates to zero, which can happen from numerical issues in the integration if the integrand is very small.
-
         return rates
-
-
-
-
 
 
 
@@ -174,9 +147,8 @@ class SpectrumTrace():
             spectrum_nu = self._spectrum_nu(E_Rs, nu)
             return spectrum_nu
         else:
-            spectrum = np.array([self._spectrum_nu(E_Rs, key) for key in config.NU_SOURCE_KEYS])
-            source_summed_spectrum = spectrum.sum(axis=0)
-            return source_summed_spectrum
+            spectrum = np.stack([self._spectrum_nu(E_Rs, key) for key in config.NU_SOURCE_KEYS], axis=0)
+            return spectrum.sum(axis=0)
 
     def _spectrum_nu(self, E_Rs, nu):
         """Same as above but for specific source."""
