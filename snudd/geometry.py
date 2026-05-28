@@ -119,7 +119,7 @@ class SolarAngles():
 
 
 
-    def nadir_hist(self, bins=50):
+    def cnadir_hist(self, bins=50):
         """Compute binned histogram of cos(nadir) with [bins] number of bins."""
 
         _ , coords = self.orbit() 
