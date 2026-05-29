@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from typing import Protocol, Callable, Sequence, Optional
 from snudd.nsi import oscillation as osc
 
+# Keep regular numpy too
+import numpy as np
+
 # --- Backend selection (NumPy or JAX) ---
 try:
     # must be BEFORE jax import
@@ -22,8 +25,15 @@ except ImportError:
     import numpy as jnp  # fallback alias
     USE_JAX = False
 
-# Keep regular numpy too
-import numpy as np
+# --- Backend selection (Numba) ---
+# Minor speedup from Numba for large scans
+try:
+    import numba as nb
+    USE_NUMBA = True
+except ImportError:
+    USE_NUMBA = False
+
+
 
 
 
@@ -194,6 +204,31 @@ PREMmodel = LayeredPolyEarth(xr_km=xr_km_PREM, coeffs=coeffs_PREM, Ye_core=0.466
 
 
 
+@nb.njit(parallel=True, fastmath=True)
+def _matmul_chain_numba(M):
+    """Numba-optimized function to multiply a chain of matrices M[n,k] for each n in parallel.
+    S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1]."""
+
+    N_E, Nst = M.shape[0], M.shape[1]
+
+    S = np.zeros((N_E, 3, 3), dtype=np.complex128)
+
+    for n in nb.prange(N_E):
+
+        # Initialize identity
+        S[n, 0, 0] = 1.0
+        S[n, 1, 1] = 1.0
+        S[n, 2, 2] = 1.0
+
+        # Multiply the chain of matrices for this n
+        for k in range(Nst):
+            S[n] = S[n] @ M[n, k]
+
+    return S
+
+
+
+
 
 def _core_evolution_kernel(H, dxs, tRad):
     """
@@ -233,7 +268,10 @@ def _core_evolution_kernel(H, dxs, tRad):
 
         S = lax.associative_scan(matmul, M, axis=1)
         return S[:, -1] # the last element of the scan is the full product
-
+    elif USE_NUMBA:
+        # Use Numba-optimized loop for speed if available; still O(N_E * Nst) but with much lower constant overhead than Python loop.
+        # Note: Numba doesn't support JAX's lax.associative_scan, so we do a simple loop here. For large Nst, consider implementing a manual parallel reduction if needed.  
+        return _matmul_chain_numba(M)
     else:
         # Fallback: your existing scan
         # If odd number of slices, save the last one to multiply back later
