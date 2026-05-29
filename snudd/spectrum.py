@@ -5,6 +5,7 @@ from tkinter import E
 import typing
 
 import numpy as np
+import numba as nb
 from scipy.interpolate import interp1d
 from snudd import config
 from snudd.config import trapezoid
@@ -34,6 +35,7 @@ class SpectrumTrace():
         self.cnadirs = [-1]
         self.cnadir_weights = [1]
         self._cache_energy = {}     # caches E_nus + flux for each source to avoid repeated interpolation of the flux for each spectrum call, which can be expensive for large scans.
+        self._cache_weights = {}    # cache trapezoidal weights for each unique E_nus grid to avoid repeated computation of trapezoidal weights for each spectrum call, which can be expensive for large scans.
 
     def nu_minimum_energy(self, E_R):
         """Return neutrino minimum energy given a recoil in GeV."""
@@ -67,6 +69,26 @@ class SpectrumTrace():
 
         return self._cache_energy[key]
     
+
+
+
+
+    def _get_weights(self, E_nus):
+        """Cache trapezoid weights for given E_nus to avoid repeated computation for each spectrum call.
+        E_nus: shape (N_Enu, N_ER)"""
+        key = hash(E_nus.tobytes())
+
+        if key not in self._cache_weights:
+
+            W = np.zeros_like(E_nus)
+
+            for r in range(E_nus.shape[1]):
+                W[:, r] = _trapezoid_weights(E_nus[:, r])
+
+            self._cache_weights[key] = W
+
+        return self._cache_weights[key]
+      
     
     def _rate_nu(self, E_R, nu):
         """Return differential rate for a neutrino source. Overridden for each breakdown by subclasses."""
@@ -111,15 +133,21 @@ class SpectrumTrace():
             density_eff += density_nad * self.cnadir_weights[icnadir]
         density_eff = np.transpose(density_eff, (3, 0, 1, 2)) # Get into correct shape (ER, Enu, 3, 3)
 
-        # ---- Perform matrix product and trace as einsum instead of matmul + trace ----
-        traces = np.einsum('reij,reji->re', density_eff, dsigma_mat) # Shape (E_R, E_nu) after einsum
 
-        # ---- Single integration over averaged density ----
-        integrands = nu_fluxes * traces # Shape (E_R, E_nu) after multiplication, ready for integration
-        rates = self.target.number_targets_mass(E_R) * trapezoid(integrands, E_nus.T) * config.rate_conv
+        weights_trap = self._get_weights(E_nus)   # cache this too!
+        rates = _rate_kernel_numba(nu_fluxes, density_eff, dsigma_mat, weights_trap)
+        rates *= self.target.number_targets_mass(E_R) * config.rate_conv
+
+
+        # # ---- Perform matrix product and trace as einsum instead of matmul + trace ----
+        # traces = np.einsum('reij,reji->re', density_eff, dsigma_mat) # Shape (E_R, E_nu) after einsum
+
+        # # ---- Single integration over averaged density ----
+        # integrands = nu_fluxes * traces # Shape (E_R, E_nu) after multiplication, ready for integration
+        # rates = self.target.number_targets_mass(E_R) * trapezoid(integrands, E_nus.T) * config.rate_conv
 
         rates[rates < 0] = 0. # Set any negative rates to zero, which can happen from numerical issues in the integration if the integrand is very small.
-        return rates
+        return rates.real # Return real part of rates, as they should be real but can have small imaginary part from numerical issues in the integration.
 
 
 
@@ -160,3 +188,58 @@ class SpectrumTrace():
         if total:
             return spectrum.sum(axis=0)
         return spectrum
+    
+
+
+
+
+@nb.njit(parallel=True, fastmath=True)
+def _rate_kernel_numba(nu_fluxes, density_eff, dsigma_mat, weights):
+    """
+    Compute rates by explicit contraction and trapezoidal integration with precomputed weights, using Numba for speed. 
+    This is much faster than np.einsum + np.trapz for large scans, as it avoids overhead of these functions in the inner loop.
+
+    Shapes:
+        nu_fluxes  : (N_ER, N_Enu)
+        density_eff: (N_ER, N_Enu, 3, 3)
+        dsigma_mat : (N_ER, N_Enu, 3, 3)
+        weights    : (N_Enu, N_ER)  (trapezoidal weights for integration over E_nus, transposed to allow broadcasting with nu_fluxes)
+    """
+
+    N_ER, N_Enu = nu_fluxes.shape
+    rates = np.zeros(N_ER, dtype=np.complex128)
+
+    for r in nb.prange(N_ER):
+
+        integral = 0.0
+
+        for e in range(N_Enu):
+
+            trace = 0.0
+            for i in range(3):
+                for j in range(3):
+                    # Note the order of indices in density_eff and dsigma_mat for the trace: 
+                    # we want sum_ij density_eff[r, e, i, j] * dsigma_mat[r, e, j, i]
+                    trace += density_eff[r, e, i, j] * dsigma_mat[r, e, j, i]
+
+            # Multiply by flux and trapezoidal weight for this E_nu and add to integral 
+            # (handcrafting the integration here to avoid overhead of np.einsum and np.trapz in the inner loop, which can be significant for large scans)
+            integral += nu_fluxes[r, e] * trace * weights[e, r]
+
+        rates[r] = integral
+
+    return rates
+
+
+
+def _trapezoid_weights(x):
+    """Return trapezoid weights for integration over x array."""
+    w = np.zeros_like(x)
+
+    dx = np.diff(x)
+
+    w[1:-1] = 0.5 * (dx[:-1] + dx[1:])
+    w[0] = dx[0] / 2
+    w[-1] = dx[-1] / 2
+
+    return w
