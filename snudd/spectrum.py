@@ -5,14 +5,25 @@ from tkinter import E
 import typing
 
 import numpy as np
-import numba as nb
 from scipy.interpolate import interp1d
 from snudd import config
 from snudd.config import trapezoid
 from snudd.nsi.nsi_probabilities import DensityMatrixEarthCalculator, interp_density_sm
 
+
 if typing.TYPE_CHECKING:
     from snudd.targets import Target
+
+
+# --- Backend selection (NumPy or Numba) ---
+# Minor speedup from Numba for large scans
+try:
+    import numba as nb
+    USE_NUMBA = True
+except ImportError:
+    USE_NUMBA = False
+
+
 
 
 # Number of points to use in neutrino energy integration for continuous spectra
@@ -68,9 +79,6 @@ class SpectrumTrace():
             self._cache_energy[key] = (E_nus, nu_fluxes)
 
         return self._cache_energy[key]
-    
-
-
 
 
     def _get_weights(self, E_nus):
@@ -106,6 +114,7 @@ class SpectrumTrace():
 
             density_eff = 0
             # Compute effective density matrix by summing over cnadir angles with corresponding weights
+            # density_eff: (3,3)
             for icnadir in range(len(self.cnadirs)):
                 density_nad  = self.density_calc.matrix_from_elements(density_elements_flux[icnadir](E_nu_mono))  # Shape (3,3)
                 density_eff += self.cnadir_weights[icnadir] * density_nad
@@ -115,6 +124,7 @@ class SpectrumTrace():
             # and then check if mono energy is above minimum energy to return zero if not.
             integrated = v_flux * np.einsum('ij,rij->r', density_eff, dsigma_mat) 
             return  self.target.number_targets_mass(E_R) * integrated * config.rate_conv * E_nus_mins    
+
 
         # CONTINUOUS neutrino sources (e.g. 8B) 
         # ---- Neutrino energy grid (in GeV) ----
@@ -134,17 +144,20 @@ class SpectrumTrace():
         density_eff = np.transpose(density_eff, (3, 0, 1, 2)) # Get into correct shape (ER, Enu, 3, 3)
 
 
-        weights_trap = self._get_weights(E_nus)   # cache this too!
-        rates = _rate_kernel_numba(nu_fluxes, density_eff, dsigma_mat, weights_trap)
-        rates *= self.target.number_targets_mass(E_R) * config.rate_conv
+        if USE_NUMBA:
+            # Use Numba-optimized kernel for speed if available, which performs the integration by hand to avoid overhead of np.einsum and np.trapz in the inner loop, which can be significant for large scans.
+            weights_trap = self._get_weights(E_nus)   # cache this too!
+            n_targets = self.target.number_targets_mass(E_R)
+            rates = _rate_kernel_numba(nu_fluxes, density_eff, dsigma_mat, weights_trap)
+            rates *= n_targets * config.rate_conv
+        else:
+            # Use straightforward NumPy implementation with np.einsum and scipy for clarity if Numba not available.
+            # ---- Perform matrix product and trace as einsum instead of matmul + trace ----
+            traces = np.einsum('reij,reji->re', density_eff, dsigma_mat) # Shape (E_R, E_nu) after einsum
 
-
-        # # ---- Perform matrix product and trace as einsum instead of matmul + trace ----
-        # traces = np.einsum('reij,reji->re', density_eff, dsigma_mat) # Shape (E_R, E_nu) after einsum
-
-        # # ---- Single integration over averaged density ----
-        # integrands = nu_fluxes * traces # Shape (E_R, E_nu) after multiplication, ready for integration
-        # rates = self.target.number_targets_mass(E_R) * trapezoid(integrands, E_nus.T) * config.rate_conv
+            # ---- Single integration over averaged density ----
+            integrands = nu_fluxes * traces # Shape (E_R, E_nu) after multiplication, ready for integration
+            rates = self.target.number_targets_mass(E_R) * trapezoid(integrands, E_nus.T) * config.rate_conv
 
         rates[rates < 0] = 0. # Set any negative rates to zero, which can happen from numerical issues in the integration if the integrand is very small.
         return rates.real # Return real part of rates, as they should be real but can have small imaginary part from numerical issues in the integration.
@@ -193,6 +206,29 @@ class SpectrumTrace():
 
 
 
+
+
+
+
+
+
+
+
+def _trapezoid_weights(x):
+    """Return trapezoid weights for integration over x array."""
+    w = np.zeros_like(x)
+
+    dx = np.diff(x)
+
+    w[1:-1] = 0.5 * (dx[:-1] + dx[1:])
+    w[0] = dx[0] / 2
+    w[-1] = dx[-1] / 2
+
+    return w
+
+
+
+
 @nb.njit(parallel=True, fastmath=True)
 def _rate_kernel_numba(nu_fluxes, density_eff, dsigma_mat, weights):
     """
@@ -232,14 +268,3 @@ def _rate_kernel_numba(nu_fluxes, density_eff, dsigma_mat, weights):
 
 
 
-def _trapezoid_weights(x):
-    """Return trapezoid weights for integration over x array."""
-    w = np.zeros_like(x)
-
-    dx = np.diff(x)
-
-    w[1:-1] = 0.5 * (dx[:-1] + dx[1:])
-    w[0] = dx[0] / 2
-    w[-1] = dx[-1] / 2
-
-    return w
