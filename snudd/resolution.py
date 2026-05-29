@@ -2,9 +2,11 @@
 import warnings
 
 import numpy as np
-from snudd.efficiencies import Efficiency, efficiency_lz_nr, efficiency_lz_er, efficiency_xnt_nr, efficiency_xnt_er
+from snudd.efficiencies import Efficiency, efficiency_lz_nr, efficiency_lz_er, efficiency_xnt_nr, efficiency_xnt_er, efficiency_pandaX
 from snudd.quenching import Quenching, quenching_xe, quenching_electron
 from scipy.special import erf
+
+
 
 
 def resolution_lux(E_R):
@@ -18,6 +20,15 @@ def resolution_xnt(E_R):
     a = 0.310 * 1e-3  # Last factor is to convert from keV^{1/2} to GeV^{1/2}
     b = 0.0037
     return a / np.sqrt(E_R) + b
+
+
+def resolution_pandaX(E_R):
+    """Energy resolution (fractionally) as a function of the energy for PandaX"""
+    a = 0.330 * 1e-3 
+    b = 0.016 
+    return a / np.sqrt(E_R) + b
+
+
 
 
 class Resolution:
@@ -59,11 +70,11 @@ class Convolver:
 
     def convolved_binned_rate(self, E_1, E_2):
         """Return the convolved rate within a bin with edges E_1 < E_2."""
-        return np.trapz(self._energy_response_integrand(E_1, E_2), self._E_primes_ee * 1e6)
+        return np.trapezoid(self._energy_response_integrand(E_1, E_2), self._E_primes_ee * 1e6)
 
     def convolve_spectrum(self, E_R):
         """Return convolved spectrum at E_R"""
-        convolution = np.array([np.trapz(self._convolution_integrand(E), self._E_primes_ee) for E in E_R])
+        convolution = np.array([np.trapezoid(self._convolution_integrand(E), self._E_primes_ee) for E in E_R])
         return spec_ee2nr(E_R, convolution, self.quenching)
 
     def _energy_response_function(self, E_ee, E_1, E_2):
@@ -136,3 +147,5 @@ res_lz_er = Resolution(resolution_lux, efficiency_lz_er, quenching_electron)
 
 res_xnt_nr = Resolution(resolution_xnt, efficiency_xnt_nr,quenching_xe)
 res_xnt_er = Resolution(resolution_xnt, efficiency_xnt_er, quenching_electron)
+
+res_panda_nr = Resolution(resolution_pandaX, efficiency_pandaX, quenching_xe)

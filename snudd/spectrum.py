@@ -65,7 +65,7 @@ class SpectrumTrace():
         matrix_mult = matrix_mult.swapaxes(0,1)
 
         integrands = nu_fluxes * matrix_mult.trace(axis1=-2, axis2=-1).T
-        rates = N_targets * np.trapz(integrands, E_nus.T) * config.rate_conv
+        rates = N_targets * np.trapezoid(integrands, E_nus.T) * config.rate_conv
 
         return np.where(rates < 0, 0, rates)
 
