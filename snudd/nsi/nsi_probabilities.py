@@ -193,7 +193,7 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
                                       Nav=50,     # Number of points to average over for the matter potential in each slice
                                       osc_params=self.osc_params)
         
-    def interpolate_earth_density_elements(self, cnadirs=[-1], E_nu_min=3.4640e-3, E_nu_max=1.8784e1):
+    def interpolate_earth_density_elements(self, cnadirs=[-1], fast=False, E_nu_min=3.4640e-3, E_nu_max=1.8784e1):
 
         """
         Return dictionary of interpolated de for all nu sources.
@@ -210,7 +210,7 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
         for cnadir in cnadirs:
             # Compute S matrix only once, does not depend on the initial density matrix 
             # 1) build S(E) for all energies
-            S_list = self.earth_propagator.S_matrix_batch(E_nus, cnadir) # (N,3,3)
+            S_list = self.earth_propagator.S_matrix_batch(E_nus, cnadir, fast) # (N,3,3)
             # S = np.stack(S_list, axis=0)                    
             S_angles.append(S_list)
         #------------------------------------------------

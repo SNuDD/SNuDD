@@ -47,15 +47,16 @@ class Target(ABC):
 
         self._spec.prepare_probabilities()
 
-    def prepare_density(self, cnadirs=[-1], cnadir_weights=[1]):
+    def prepare_density(self, cnadirs=[-1], cnadir_weights=[1], fast=False):
         """
         Prepare neutrino density matrix for use in spectrum.
         Give a list of cos(nadir) [cnadirs] and corresponding weights [cnadir_weights] to run earth matter evolution. 
         If cnadirs = [-1], no earth matter evolution is done and the density matrix is identity.
+        Fast mode uses Magnus expansion for earth matter evolution instead of full numerical eigendecomposition.
         """
         if len(cnadirs) != len(cnadir_weights):
             raise ValueError("Cnadirs and cnadir_weights must have the same shape.")
-        self._spec.prepare_density(cnadirs, cnadir_weights)
+        self._spec.prepare_density(cnadirs, cnadir_weights, fast)
 
 
 class Nucleus(Target):

@@ -123,7 +123,7 @@ class SpectrumTrace():
             # No integration needed for monoenergetic sources, so we just multiply flux by trace to get rate at mono energy, 
             # and then check if mono energy is above minimum energy to return zero if not.
             integrated = v_flux * np.einsum('ij,rij->r', density_eff, dsigma_mat) 
-            return  self.target.number_targets_mass(E_R) * integrated * config.rate_conv * E_nus_mins    
+            return  integrated.real * self.target.number_targets_mass(E_R) * config.rate_conv * E_nus_mins    
 
 
         # CONTINUOUS neutrino sources (e.g. 8B) 
@@ -163,8 +163,7 @@ class SpectrumTrace():
         return rates.real # Return real part of rates, as they should be real but can have small imaginary part from numerical issues in the integration.
 
 
-
-    def prepare_density(self, cnadirs=[-1], cnadir_weights=[1]):
+    def prepare_density(self, cnadirs=[-1], cnadir_weights=[1], fast=False):
         """
         Return dictionary of interpolated probabilities for all nu sources.
         Interpolation done between neutrinos energies of E_nu_min and E_nu_max (MeV).
@@ -176,7 +175,7 @@ class SpectrumTrace():
 
         self.cnadirs             = cnadirs
         self.cnadir_weights      = cnadir_weights
-        self.nu_density_elements = self.density_calc.interpolate_earth_density_elements(cnadirs)
+        self.nu_density_elements = self.density_calc.interpolate_earth_density_elements(cnadirs, fast)
         
 
     def spectrum(self, E_Rs, total=True, nu: str = None):

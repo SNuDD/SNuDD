@@ -25,13 +25,6 @@ except ImportError:
     import numpy as jnp  # fallback alias
     USE_JAX = False
 
-# --- Backend selection (Numba) ---
-# Minor speedup from Numba for large scans
-try:
-    import numba as nb
-    USE_NUMBA = True
-except ImportError:
-    USE_NUMBA = False
 
 
 
@@ -201,35 +194,6 @@ PREMmodel = LayeredPolyEarth(xr_km=xr_km_PREM, coeffs=coeffs_PREM, Ye_core=0.466
 
 
 
-
-
-
-@nb.njit(parallel=True, fastmath=True)
-def _matmul_chain_numba(M):
-    """Numba-optimized function to multiply a chain of matrices M[n,k] for each n in parallel.
-    S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1]."""
-
-    N_E, Nst = M.shape[0], M.shape[1]
-
-    S = np.zeros((N_E, 3, 3), dtype=np.complex128)
-
-    for n in nb.prange(N_E):
-
-        # Initialize identity
-        S[n, 0, 0] = 1.0
-        S[n, 1, 1] = 1.0
-        S[n, 2, 2] = 1.0
-
-        # Multiply the chain of matrices for this n
-        for k in range(Nst):
-            S[n] = S[n] @ M[n, k]
-
-    return S
-
-
-
-
-
 def _core_evolution_kernel(H, dxs, tRad):
     """
     Core matter Hamiltonian eigen-decomposition and evolution kernel.
@@ -268,10 +232,7 @@ def _core_evolution_kernel(H, dxs, tRad):
 
         S = lax.associative_scan(matmul, M, axis=1)
         return S[:, -1] # the last element of the scan is the full product
-    elif USE_NUMBA:
-        # Use Numba-optimized loop for speed if available; still O(N_E * Nst) but with much lower constant overhead than Python loop.
-        # Note: Numba doesn't support JAX's lax.associative_scan, so we do a simple loop here. For large Nst, consider implementing a manual parallel reduction if needed.  
-        return _matmul_chain_numba(M)
+    
     else:
         # Fallback: your existing scan
         # If odd number of slices, save the last one to multiply back later
@@ -293,6 +254,48 @@ def _core_evolution_kernel(H, dxs, tRad):
 
 # JIT-compile the core evolution kernel for speed if JAX is available
 _core_evolution_kernel = jitify(_core_evolution_kernel)
+
+
+
+
+def _magnus_evolve(H, dxs, tRad):
+    """
+    Alternative evolution using the Magnus expansion up to second order
+    Approximate S ≈ exp(-i · (Ω1 + Ω2)) where Ω is Hermitian order-by-order.
+        Ω1 = ∫ H(t) dt ≈ Σ H_k · dx_k 
+        Ω2 = -i/2 ∫∫ [H(t1), H(t2)] dt1 dt2 ≈ -i/2 Σ_{k<l} [H_k, H_l] · dx_k · dx_l.
+    
+     - H:   (N_E, Nst, 3, 3) array of Hamiltonians for each energy and slice
+     - dxs: (Nst,) array of slice widths in units of tRad
+     - tRad: total path length in units of tRad
+    Returns:
+     - S: (N_E, 3, 3) array of final evolution matrices S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1]
+    """
+
+    # First order term: Ω1 = Σ H_k · dx_k Hermitian
+    Omega1 = np.sum(H * dxs[None,:,None,None], axis=1)
+
+    # Second order term: Ω2 = -i/2 Σ_{k<l} [H_k, H_l] · dx_k · dx_l
+    # Since [H_i,H_j] is anti-Hermitian, multiplying by i makes Ω2 Hermitian.
+    Omega2 = np.zeros_like(Omega1, dtype=np.complex128)
+
+    for i in range(len(dxs)):
+        Hi = H[:, i]
+
+        for j in range(i):
+            Hj = H[:, j]
+
+            comm = Hi @ Hj - Hj @ Hi
+            Omega2 += 0.5j * comm * dxs[i] * dxs[j]
+
+    # Eigendecomposition of Magnus expansion for total Ω = Ω1 + Ω2
+    Omega = Omega1 + Omega2
+
+    Em, Um = np.linalg.eigh(Omega)  # (N_E,3),(N_E,3,3)
+
+    phase = np.exp(-1j * Em * tRad)
+
+    return np.einsum('nia,na,nja->nij', Um, phase, Um.conj())
 
 
 
@@ -357,7 +360,7 @@ class EarthProbEvolve:
     
     
 
-    def S_matrix_batch(self, enus_GeV: np.ndarray, cnadir: float) -> np.ndarray:
+    def S_matrix_batch(self, enus_GeV: np.ndarray, cnadir: float, fast: bool = False) -> np.ndarray:
         """
         Compute the (N_E, 3, 3) array of S-matrices for N_E energies at fixed cnadir.
         Replaces the per-energy loop over S_matrix().
@@ -396,31 +399,35 @@ class EarthProbEvolve:
         H  = (Hv[:, None, :, :]
             + (s2GFNa * Vav)[None, :, None, None] * Vf[None, None, :, :])
         
-
         # ------------------------------------------------------------------ #
-        # Compute matter evolution S-matrices for all energies at once using the core evolution kernel.
+        # Compute matter evolution S-matrices for all energies at once 
         # ------------------------------------------------------------------ #
-        # Switch to backend array if JAX is enabled
-        if USE_JAX:
-            H_backend   = jnp.array(H)
-            dxs_backend = jnp.array(dxs)
-        # Otherwise, keep as NumPy arrays
+        if fast:
+            # Fast but less accurate: use Magnus expansion instead of exact eigendecomposition + scan
+            return np.array(_magnus_evolve(H, dxs, self.tRad))
+        
         else:
-            H_backend   = H
-            dxs_backend = dxs
+            # Exact but slower: eigendecomposition + scan. JIT-compiled with JAX if available for speed.
+            if USE_JAX:
+                H_backend   = jnp.array(H)
+                dxs_backend = jnp.array(dxs)
+            # Otherwise, keep as NumPy arrays
+            else:
+                H_backend   = H
+                dxs_backend = dxs
 
-        return np.array(_core_evolution_kernel(H_backend, dxs_backend, self.tRad))
+            return np.array(_core_evolution_kernel(H_backend, dxs_backend, self.tRad))
 
         
 
-    def evolve_rhosolar(self, rho_solar, enus_GeV, cnadir):
+    def evolve_rhosolar(self, rho_solar, enus_GeV, cnadir, fast=False):
         """
         rho_solar : (N_E, 3, 3) complex
         enus_GeV  : (N_E,) energies
         cnadir      : scalar cos(nadir)
         Returns rho_earth : (N_E, 3, 3)
         """
-        S    = self.S_matrix_batch(np.asarray(enus_GeV), cnadir)   # (N_E, 3, 3)
+        S    = self.S_matrix_batch(np.asarray(enus_GeV), cnadir, fast)   # (N_E, 3, 3)
         Sdag = np.swapaxes(S.conj(), -1, -2)
         return np.matmul(np.matmul(S, rho_solar), Sdag)
 
