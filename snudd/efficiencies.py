@@ -16,8 +16,22 @@ LZ_NR_22 =np.loadtxt(config.get_data("exps/lz/LZ_NR_first_data.txt"), unpack=Tru
 LZ_NR_22 = np.array([LZ_NR_22[0][LZ_NR_22[1] > 0.0], LZ_NR_22[1][LZ_NR_22[1] > 0.0]]) ### get rid of the zero entries because they mess up with the interpolation
 XNT_ER_22 = np.loadtxt(config.get_data("exps/xnt/XNT_ER_22.csv"), delimiter=',', unpack=True)
 
-##### below is the LZ efficiency from 
+
+
+
+
+
+
+##### NEW DATA
 LZ_B8_DATA = np.loadtxt(config.get_data("exps/LZ8B2025/LZB8-v2-Efficiency.csv"), delimiter=",", skiprows=7, unpack=True)
+PANDAX_DATA = np.loadtxt(config.get_data("exps/pandaX/pandaX.csv"), delimiter=',', skiprows=1, unpack=True)
+XNT_DATA = np.loadtxt(config.get_data("exps/xnt/xnt_2025.csv"), delimiter=',', skiprows=1, unpack=True)
+
+
+
+
+
+
 
 
 def linear_extend_strategy(E_R, E_thresh_50_new, efficiency):
@@ -55,8 +69,10 @@ def log_extend_strategy(E_R, E_thresh_50_new, efficiency):
 
 
 class Efficiency:
-    """An interpolant that returns the efficiency function along with some of its important properties. An extension
+    """
+    An interpolant that returns the efficiency function along with some of its important properties. An extension
     of the efficiency is also available.
+    Recoil energies are expected to be in GeV, and the data files are expected to be in keV, so the class handles the conversion internally.
     """
 
     def __init__(self, data, order=1):
@@ -110,8 +126,21 @@ threshold_50_xnt_nr = efficiency_xnt_nr.threshold_50
 efficiency_xnt_er = Efficiency(XNT_ER_DATA)
 threshold_50_xnt_er = efficiency_xnt_er.threshold_50
 
+
+
+
+
+#NEW ONES
 efficiency_lz_b8 = Efficiency(LZ_B8_DATA)
 #threshold_50_lz_b8 = efficiency_lz_b8.threshold_50
+
+efficiency_pandaX = Efficiency(PANDAX_DATA)
+
+efficiency_xnt_2025 = Efficiency(XNT_DATA)
+
+
+
+
 
 
 
