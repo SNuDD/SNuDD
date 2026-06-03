@@ -4,6 +4,7 @@ from tkinter import E
 
 import typing
 
+import numba as nb
 import numpy as np
 from scipy.interpolate import interp1d
 from snudd import config
