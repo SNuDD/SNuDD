@@ -18,7 +18,7 @@ from snudd.targets import Electron, Nucleus
 from snudd.geometry import SolarAngles
 from snudd.models import GeneralNSI, SM
 from snudd.resolution import Resolution, Convolver, res_xnt_nr, res_lz_nr, res_panda_nr
-from snudd.efficiencies import efficiency_lz_b8, efficiency_pandaX, efficiency_xnt_2025
+from snudd.efficiencies import efficiency_lz_b8, efficiency_pandaX, efficiency_xnt_2026
 from snudd.nsi import utils
 
 
@@ -102,8 +102,8 @@ xe_iso_data.T[2] /= xe_iso_data.T[2].sum()
 
 # Setting up paths
 #------------------------------------------------------------
-# respath = '/hydrarepo/vcosta/SNuDD/results'
-respath = '/home/Valeria/Code/SNuDD/results'
+respath = '/hydrarepo/vcosta/SNuDD/results'
+# respath = '/home/Valeria/Code/SNuDD/results'
 
 outpath = os.path.join(respath, model)
 Path(outpath).mkdir(parents=True, exist_ok=True)
@@ -139,7 +139,7 @@ def average_isotope_spectra(nuclei, isotopic_fractions, E_Rs, model, cnadirs, we
     for inucleus, nucleus in enumerate(nuclei):
         nucleus.update_model(model)
         if inucleus == 0:  
-            nucleus.prepare_density(cnadirs=cnadirs, cnadir_weights=weights, fast=True)  
+            nucleus.prepare_density(cnadirs=cnadirs, cnadir_weights=weights, fast=False)  
             prepared_density = nucleus._spec.nu_density_elements
         nucleus._spec.nu_density_elements = prepared_density
         spectrum_iso = nucleus.spectrum(E_Rs)
@@ -153,8 +153,8 @@ def counts_LZB8_NR(signal, E_Rs):
     return convolution_lz_sig.convolved_binned_rate(1.0e-7, 1.5e-5) * exposure 
 
 def counts_XNT2025_NR(signal, E_Rs):
-    exposure = 3.51 # in tn yr-1
-    convolution_xnt_sig = Convolver(E_Rs, signal, efficiency_xnt_2025, res_xnt_nr)
+    exposure = 6.77 # in tn yr-1
+    convolution_xnt_sig = Convolver(E_Rs, signal, efficiency_xnt_2026, res_xnt_nr)
     return convolution_xnt_sig.convolved_binned_rate(1.0e-7, 1.5e-5) * exposure 
 
 def counts_PANDA_NR(signal, E_Rs):
@@ -263,8 +263,8 @@ def main():
     print(f"\nStarting {model} NSI scan using {ncores} cores...\n")
 
     # Construct the Grid
-    etaspace = np.linspace(-np.pi/2, np.pi/2, 5) 
-    y_half = np.geomspace(0.01, 3.1, 5) 
+    etaspace = np.linspace(-np.pi/2, np.pi/2, 2*ncores) 
+    y_half = np.geomspace(0.05, 3, 60)  #now is running with 40
     eps_space = np.concatenate([-y_half[::-1], y_half]) 
 
     etaGrid, epsGrid = np.meshgrid(etaspace, eps_space, indexing='ij')
