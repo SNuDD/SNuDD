@@ -3,7 +3,7 @@ import warnings
 
 import numpy as np
 from snudd.config import trapezoid
-from snudd.efficiencies import Efficiency, efficiency_lz_nr, efficiency_lz_er, efficiency_xnt_nr, efficiency_xnt_er, efficiency_pandaX
+from snudd.efficiencies import Efficiency, efficiency_lz_nr, efficiency_lz_er, efficiency_xnt_nr, efficiency_xnt_er, efficiency_pandaX, efficiency_lz_b8, efficiency_xnt_2026
 from snudd.quenching import Quenching, quenching_xe, quenching_electron
 from scipy.special import erf
 
@@ -143,10 +143,10 @@ def spec_ee2nr(E_nr, spec_ee, quenching):
     return spec_ee * conv_factor
 
 
-res_lz_nr = Resolution(resolution_lux, efficiency_lz_nr,quenching_xe)
+res_lz_nr = Resolution(resolution_lux, efficiency_lz_b8,quenching_xe)
 res_lz_er = Resolution(resolution_lux, efficiency_lz_er, quenching_electron)
 
-res_xnt_nr = Resolution(resolution_xnt, efficiency_xnt_nr,quenching_xe)
+res_xnt_nr = Resolution(resolution_xnt, efficiency_xnt_2026,quenching_xe)
 res_xnt_er = Resolution(resolution_xnt, efficiency_xnt_er, quenching_electron)
 
 res_panda_nr = Resolution(resolution_pandaX, efficiency_pandaX, quenching_xe)
