@@ -263,8 +263,8 @@ def main():
     print(f"\nStarting {model} NSI scan using {ncores} cores...\n")
 
     # Construct the Grid
-    etaspace = np.linspace(-np.pi/2, np.pi/2, 2*ncores) 
-    y_half = np.geomspace(0.05, 3, 60)  #now is running with 40
+    etaspace = np.linspace(-np.pi/2, np.pi/2, 2*ncores)
+    y_half = np.geomspace(0.03, 3, 60)  #now is running with 40
     eps_space = np.concatenate([-y_half[::-1], y_half]) 
 
     etaGrid, epsGrid = np.meshgrid(etaspace, eps_space, indexing='ij')
