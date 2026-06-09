@@ -114,6 +114,9 @@ class Efficiency:
                             funclist=[lambda E: self._interpolant(E), 0.])
 
 
+
+# Resolution functions are in terms of recoil energy, and are fractional (sigma / E_R)
+#TODO: Unify all of these!!
 efficiency_lz_nr = Efficiency(LZ_NR_DATA, order=2)
 threshold_50_lux_nr = efficiency_lz_nr.threshold_50  # TODO: Replace these with field call
 
@@ -125,7 +128,6 @@ threshold_50_xnt_nr = efficiency_xnt_nr.threshold_50
 
 efficiency_xnt_er = Efficiency(XNT_ER_DATA)
 threshold_50_xnt_er = efficiency_xnt_er.threshold_50
-
 
 
 
@@ -145,6 +147,7 @@ efficiency_xnt_2026 = Efficiency(XNT_DATA)
 
 
 ######################
+# How are these different from the ones above? Are they just different datasets, or are they different in some other way? 
 efficiency_lz_nr_22 = Efficiency(LZ_NR_22)
 threshold_50_lux_nr_22 = efficiency_lz_nr_22.threshold_50 
 
