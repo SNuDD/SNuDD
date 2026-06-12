@@ -11,6 +11,8 @@ Legend: [ ] - open task; [-] - declined taks; [x] - done task
   - [ ] Unify preloaded data sets
   - [ ] Clean up the predefined efficiency objects
 
+- [ ] Remove `earth_class_test` notebook
+
 ## Manual
 
 Tasks related to new content.

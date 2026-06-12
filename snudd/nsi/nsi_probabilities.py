@@ -193,6 +193,27 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
                                       Nav=50,     # Number of points to average over for the matter potential in each slice
                                       osc_params=self.osc_params)
         
+
+    def density_earth(self, E_nus, cnadirs = [-1], weights = [1], nu='8B'):
+        """
+        Compute density matrix propagated through earth matter under incident angle cos(eta)=cnadir.
+        Works also for wieghted histogram of incident angles. Returns weighted density matrix.
+        """
+
+        assert(len(cnadirs)==len(weights))
+
+        # Get solar density matrix
+        rho_sol =  super().density(E_nus, nu)
+
+        rho_earth = np.zeros_like(rho_sol, dtype = complex)
+        # Loop over nadir angles
+        for i, cn in enumerate(cnadirs):
+            # Evolve density matrix thorugh earth matter
+            rho_earth += self.earth_propagator.evolve_rhosolar(rho_sol, E_nus, cn) * weights[i]
+
+        return rho_earth
+
+        
     def interpolate_earth_density_elements(self, cnadirs=[-1], fast=False, E_nu_min=3.4640e-3, E_nu_max=1.8784e1):
 
         """
