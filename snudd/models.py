@@ -68,7 +68,7 @@ class Model(ABC):
         pass
 
     @abstractmethod
-    def electron_cross_section_flavour(self, electron: Electron, E_R, E_nu):
+    def electron_cross_section_flavour(self, E_R, E_nu):
         """Return cross section for target by flavour. Energies in GeV."""
         pass
 
@@ -146,7 +146,7 @@ Code will run, but results may be unphysical!
                                  (cs_sm + cs_int + cs_bsm))
 
 
-    def electron_cross_section_flavour(self, electron, E_R, E_nu):
+    def electron_cross_section_flavour(self, E_R, E_nu):
         """Return flavour cross section matrix. Energies in GeV."""
 
         eps_matrix =  self.eps_matrix 

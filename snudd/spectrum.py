@@ -148,9 +148,8 @@ class SpectrumTrace():
         if USE_NUMBA:
             # Use Numba-optimized kernel for speed if available, which performs the integration by hand to avoid overhead of np.einsum and np.trapz in the inner loop, which can be significant for large scans.
             weights_trap = self._get_weights(E_nus)   # cache this too!
-            n_targets = self.target.number_targets_mass(E_R)
-            rates = _rate_kernel_numba(nu_fluxes, density_eff, dsigma_mat, weights_trap)
-            rates *= n_targets * config.rate_conv
+            n_targets = self.target.number_targets_mass(E_R[0]) # Determine number of targets per ER (energy-dependent for electron scattering)
+            rates = n_targets * _rate_kernel_numba(nu_fluxes, density_eff, dsigma_mat, weights_trap) * config.rate_conv
         else:
             # Use straightforward NumPy implementation with np.einsum and scipy for clarity if Numba not available.
             # ---- Perform matrix product and trace as einsum instead of matmul + trace ----
@@ -158,7 +157,7 @@ class SpectrumTrace():
 
             # ---- Single integration over averaged density ----
             integrands = nu_fluxes * traces # Shape (E_R, E_nu) after multiplication, ready for integration
-            rates = self.target.number_targets_mass(E_R) * trapezoid(integrands, E_nus.T) * config.rate_conv
+            rates = self.target.number_targets_mass(E_R[0]) * trapezoid(integrands, E_nus.T) * config.rate_conv
 
         rates[rates < 0] = 0. # Set any negative rates to zero, which can happen from numerical issues in the integration if the integrand is very small.
         return rates.real # Return real part of rates, as they should be real but can have small imaginary part from numerical issues in the integration.

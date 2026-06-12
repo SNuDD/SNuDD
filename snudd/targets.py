@@ -141,7 +141,7 @@ class Electron(Target):
 
     def cross_section_flavour(self, E_R, E_nu):
         """Return flavour cross section from given model."""
-        return self.model.electron_cross_section_flavour(self, E_R, E_nu)
+        return self.model.electron_cross_section_flavour(E_R, E_nu)
 
 
 def helm_form_factor(q, A):

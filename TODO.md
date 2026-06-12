@@ -11,7 +11,14 @@ Legend: [ ] - open task; [-] - declined taks; [x] - done task
   - [ ] Unify preloaded data sets
   - [ ] Clean up the predefined efficiency objects
 
+- [ ] spectrum.py:
+  -[ ] Make number support optional; test w/ and w/o
+
+
+## Notebooks
+
 - [ ] Remove `earth_class_test` notebook
+
 
 ## Manual
 
