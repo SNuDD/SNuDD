@@ -28,9 +28,17 @@ if typing.TYPE_CHECKING:
 
 def _nuclear_prefactor(nucleus, E_R, E_nu):
     """Return commonly used nuclear model prefactor."""
+    
     F_helm = nucleus.form_factor(E_R)
-    return config.G_F ** 2 / np.pi * nucleus.mass * (
-            1 - nucleus.mass * E_R / (2 * E_nu ** 2)) * F_helm ** 2
+    kin    = 1 - nucleus.mass * E_R / (2 * E_nu**2)
+    pref   = config.G_F ** 2 / np.pi * nucleus.mass * kin * F_helm ** 2
+
+    # Maximum imparted recoil @ Enu
+    ERmax = 2 * E_nu**2 / (nucleus.mass + 2*E_nu)
+
+    # Set cross section to zero in unphysical domains
+    mask  = E_R <= ERmax
+    return pref * mask
 
 
 
@@ -133,17 +141,17 @@ Code will run, but results may be unphysical!
 
 
     def nucleus_cross_section_flavour(self, nucleus, E_R, E_nu):
-        """Return flavour cross section matrix. Eneregy in GeV"""
+        """Return flavour cross section matrix. Energy in GeV"""
 
         Q_nu_N   = nucleus.Q_nu_N
         G_matrix = self.G_nucleus_coupling_matrix(nucleus)
 
-        cs_sm  = Q_nu_N ** 2 / 4 * np.diag((1,1,1))
-        cs_int = - Q_nu_N * G_matrix.real
-        cs_bsm = np.matmul(G_matrix, G_matrix.conjugate())
+        # Define full amplitude
+        # Note that we pull out a minus sign in the definition of Q_nu_N
+        A   = -Q_nu_N/2 * np.eye(3) + G_matrix
+        Asq = A.conjugate().T @ A
 
-        return np.multiply.outer(_nuclear_prefactor(nucleus, E_R, E_nu),
-                                 (cs_sm + cs_int + cs_bsm))
+        return np.multiply.outer(_nuclear_prefactor(nucleus, E_R, E_nu), Asq)
 
 
     def electron_cross_section_flavour(self, E_R, E_nu):
@@ -163,10 +171,12 @@ Code will run, but results may be unphysical!
 
         Lterm_shape_enhancement = (E_R / E_nu).shape  # To get Lterm to be correct shape for sum
 
-        Lterm  = np.multiply.outer(np.ones(Lterm_shape_enhancement), np.matmul(GL_matrix, GL_matrix.conjugate()))
-        Rterm  = np.multiply.outer((1 - E_R/E_nu)**2, np.matmul(GR_matrix, GR_matrix.conjugate()))
-        LRterm = np.multiply.outer(((config.m_e * E_R)/(2 * E_nu**2)), (np.matmul(GL_matrix, GR_matrix.conjugate())
-                                    + np.matmul(GR_matrix, GL_matrix.conjugate())))
+        #NOTE: CHECK HERMITIAN CONJUGTE
+        #################################
+        Lterm  = np.multiply.outer(np.ones(Lterm_shape_enhancement), np.matmul(GL_matrix.conjugate().T, GL_matrix))
+        Rterm  = np.multiply.outer((1 - E_R/E_nu)**2, np.matmul(GR_matrix.conjugate().T, GR_matrix))
+        LRterm = np.multiply.outer(((config.m_e * E_R)/(2 * E_nu**2)), (np.matmul(GL_matrix.conjugate().T, GR_matrix)
+                                    + np.matmul(GR_matrix.conjugate().T, GL_matrix)))
 
         return prefactor * (Lterm + Rterm - LRterm)
 
