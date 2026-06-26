@@ -24,6 +24,11 @@ if typing.TYPE_CHECKING:
 
 
 
+def _ER_max(Enu, mtarget):
+    """Maximum recoil energy ERmax for neutrino energy Enu of target mith mass mtarget."""
+    
+    return 2 * Enu**2 / (mtarget + 2 * Enu)
+
 
 
 def _nuclear_prefactor(nucleus, E_R, E_nu):
@@ -33,11 +38,10 @@ def _nuclear_prefactor(nucleus, E_R, E_nu):
     kin    = 1 - nucleus.mass * E_R / (2 * E_nu**2)
     pref   = config.G_F ** 2 / np.pi * nucleus.mass * kin * F_helm ** 2
 
-    # Maximum imparted recoil @ Enu
-    ERmax = 2 * E_nu**2 / (nucleus.mass + 2*E_nu)
-
-    # Set cross section to zero in unphysical domains
+    # Set cross section to zero if ER>ERmax
+    ERmax = _ER_max(E_nu, nucleus.mass)
     mask  = E_R <= ERmax
+
     return pref * mask
 
 
@@ -160,25 +164,27 @@ Code will run, but results may be unphysical!
         eps_matrix =  self.eps_matrix 
         xi_e = self.xi_e
 
-        GL_matrix = (np.array([[1,0,0],[0,0,0],[0,0,0]])   
-                    + config.g_L * np.diag([1,1,1]) 
-                    + 0.5*eps_matrix*xi_e)
+        prefactor = 2 * config.G_F ** 2 * config.m_e / np.pi
 
-        GR_matrix = (config.g_R*np.diag([1,1,1]) 
-                     + 0.5 * eps_matrix*xi_e)
+        # LH and RH coupling matrices
+        GL_matrix = np.diag([1,0,0]) + config.g_L * np.eye(3) + 0.5*eps_matrix*xi_e
+        GR_matrix = config.g_R*np.eye(3) + 0.5 * eps_matrix*xi_e
 
-        prefactor  = 2 * config.G_F ** 2 * config.m_e / np.pi
+        # Kinematic prefactors
+        kinL  = np.ones_like(E_R / E_nu)  # To get Lterm to be correct shape for sum
+        kinR  = (1 - E_R/E_nu)**2
+        kinLR = (config.m_e * E_R)/(2 * E_nu**2)
 
-        Lterm_shape_enhancement = (E_R / E_nu).shape  # To get Lterm to be correct shape for sum
+        # Cross section terms
+        Lterm  = np.multiply.outer(kinL,  GL_matrix.conjugate().T @ GL_matrix)
+        Rterm  = np.multiply.outer(kinR,  GR_matrix.conjugate().T @ GR_matrix)
+        LRterm = np.multiply.outer(kinLR, GL_matrix.conjugate().T @ GR_matrix + GR_matrix.conjugate().T @ GL_matrix)
 
-        #NOTE: CHECK HERMITIAN CONJUGTE
-        #################################
-        Lterm  = np.multiply.outer(np.ones(Lterm_shape_enhancement), np.matmul(GL_matrix.conjugate().T, GL_matrix))
-        Rterm  = np.multiply.outer((1 - E_R/E_nu)**2, np.matmul(GR_matrix.conjugate().T, GR_matrix))
-        LRterm = np.multiply.outer(((config.m_e * E_R)/(2 * E_nu**2)), (np.matmul(GL_matrix.conjugate().T, GR_matrix)
-                                    + np.matmul(GR_matrix.conjugate().T, GL_matrix)))
+        # Set cross section to zero if ER>ERmax
+        ERmax = _ER_max(E_nu, config.m_e)
+        mask  = E_R <= ERmax
 
-        return prefactor * (Lterm + Rterm - LRterm)
+        return prefactor * (Lterm + Rterm - LRterm) * mask[..., None, None]
 
         
 
