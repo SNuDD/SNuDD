@@ -25,7 +25,7 @@ XNT_ER_22 = np.loadtxt(config.get_data("exps/xnt/XNT_ER_22.csv"), delimiter=',',
 ##### NEW DATA
 LZ_B8_DATA = np.loadtxt(config.get_data("exps/LZ8B2025/LZB8-v2-Efficiency.csv"), delimiter=",", skiprows=7, unpack=True)
 PANDAX_DATA = np.loadtxt(config.get_data("exps/pandaX/pandaX.csv"), delimiter=',', skiprows=1, unpack=True)
-XNT_DATA = np.loadtxt(config.get_data("exps/xnt/xnt_2026.csv"), delimiter=',', skiprows=1, unpack=True)
+XNT_DATA = np.loadtxt(config.get_data("exps/xnt/xnt_efficiency.csv"), delimiter=',', skiprows=1, unpack=True)
 
 
 
