@@ -17,7 +17,9 @@ Legend: [ ] - open task; [-] - declined taks; [x] - done task
 
 ## Notebooks
 
-- [ ] Remove `earth_class_test` notebook
+- [ ] Remove all `test`, `validate` notebook
+- [ ] Remove `CEVNS`, `EVES`  notebook
+- [ ] Polish LZ NR and ER scan notebooks
 
 
 ## Manual
@@ -32,7 +34,7 @@ Tasks related to new content.
 
 - [ ] Create a release of the old code as v0.1
 - [ ] Create a release of the final code to be published with the paper as v1.0
-- [ ] Publish project on GitHub 
+- [ ] Publish project on GitHub
 - [ ] Create zenodo publication for SNuDD v1.0
 
 # DONE
