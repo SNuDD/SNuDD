@@ -14,6 +14,10 @@ Legend: [ ] - open task; [-] - declined taks; [x] - done task
 - [ ] spectrum.py:
   -[ ] Make number support optional; test w/ and w/o
 
+## Code
+
+- [ ] Clean up data repositories and adjust paths in loading
+
 
 ## Notebooks
 
