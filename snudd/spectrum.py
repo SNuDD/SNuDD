@@ -9,7 +9,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 from snudd import config
 from snudd.config import trapezoid
-from snudd.nsi.nsi_probabilities import DensityMatrixEarthCalculator, interp_density_sm
+from snudd.nsi.nsi_probabilities import DensityMatrixCalculator, interp_density_sm
 
 
 if typing.TYPE_CHECKING:
@@ -42,7 +42,7 @@ class SpectrumTrace():
         self.target = target
         self.model = target.model
         self.osc_params = target.osc_params
-        self.density_calc = DensityMatrixEarthCalculator(self.model, osc_params=self.osc_params, adiabatic_check=False)
+        self.density_calc = DensityMatrixCalculator(self.model, osc_params=self.osc_params, adiabatic_check=False)
         self.nu_density_elements = interp_density_sm
         self.cnadirs = [-1]
         self.cnadir_weights = [1]

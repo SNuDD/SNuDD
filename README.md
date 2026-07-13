@@ -54,7 +54,7 @@ In lieu of a manual, we have created a set of example jupyter notebooks in the `
 
 ### [probability_density.ipynb](https://github.com/SNuDD/SNuDD/blob/main/notebooks/probability_density.ipynb):
 
-This notebook goes through the basic steps of how to generate an `GeneralNSI` model object and compute the solar neutrino survival and disappearance probabilites via the `ProbabilityCalculator`. Next, the construction of the solar neutrino denisty matrix via the `DensityMatrixCalculator` from a `GeneralNSI` object is explained. Finally, the difference betwen the denisty matrix elements in the SM and an example NSI are illustrated.
+This notebook goes through the basic steps of how to generate an `GeneralNSI` model object and compute the solar neutrino survival and disappearance probabilites via the `ProbabilityCalculator`. Next, the construction of the solar neutrino denisty matrix via the `SolarDensityMatrixCalculator` from a `GeneralNSI` object is explained. Finally, the difference betwen the denisty matrix elements in the SM and an example NSI are illustrated.
 
 ### [CEVNS_rate.ipynb](https://github.com/SNuDD/SNuDD/blob/main/notebooks/CEVNS_rate.ipynb):
 

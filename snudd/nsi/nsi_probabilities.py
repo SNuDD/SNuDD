@@ -83,8 +83,9 @@ class ProbabilityCalculator:
             flux_dists.dist_dict[nu](xs)
         norm = config.trapezoid(flux_dists.dist_dict[nu](xs), xs)  # Account for slight lack of norm
         return config.trapezoid(integrand, xs) / norm
+    
 
-class DensityMatrixCalculator(ProbabilityCalculator):
+class SolarDensityMatrixCalculator(ProbabilityCalculator):
 
     def __init__(self, model, osc_params=osc.osc_params_best, adiabatic_check=False):
         super().__init__(model, osc_params, adiabatic_check)
@@ -180,7 +181,7 @@ class DensityMatrixCalculator(ProbabilityCalculator):
         return rho
     
     
-class DensityMatrixEarthCalculator(DensityMatrixCalculator):
+class DensityMatrixCalculator(SolarDensityMatrixCalculator):
     """Class to calculate the evolution of the density matrix through the Earth matter using the PREM model."""
 
     def __init__(self, model, earth_model=em.PREMmodel, Nslabs=50, osc_params=osc.osc_params_best, adiabatic_check=False):
@@ -275,5 +276,7 @@ class DensityMatrixEarthCalculator(DensityMatrixCalculator):
         return interp_expanded_rhos
 
 
-sm = models.SM()
-interp_density_sm = DensityMatrixEarthCalculator(sm).interpolate_earth_density_elements()
+
+
+# Predefined SM density matrix interpolator 
+interp_density_sm = DensityMatrixCalculator(models.SM()).interpolate_earth_density_elements()
