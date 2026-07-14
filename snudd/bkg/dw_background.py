@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import interpolate
 from snudd.config import get_data
-
+import ACstyle 
 
 E_low_ext = 1e-2
 
@@ -24,6 +24,23 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     E_Rs = np.logspace(-2, np.log10(50)) / 1e6
 
-    plt.figure()
-    plt.loglog(E_Rs * 1e6, total_bkg_spec_fn(E_Rs))
+
+       
+    plt.loglog(E_Rs * 1e6, total_bkg_spec_fn(E_Rs),
+               label="interpolated total")
+
+    plt.loglog(E_R_total, double_bkg, label="Double beta decay", ls=':')
+
+    plt.axhline(flat_bkg_rate_scalar, label="Flat background", ls='--')
+
+
+    plt.loglog(E_R_total, double_bkg*0.005, label=r"$\beta{\rm-decay}\, 99.5\% {\rm cut}$", ls=':')
+
+    #plt.title(r"Theoretical E$\nu$ES rate in Xe")
+    plt.ylabel(r'${\rm d}R/{\rm d}E_R\,\,\left[{\rm ton}^{-1}\,{\rm yr}^{-1}\,{\rm keV}^{-1}\right]$', size=14)
+    plt.xlabel(r'$E_{R}\,\,\left[{\rm keV}\right]$', size=14)
+    plt.xlim(xmin=1.0)
+    plt.ylim(ymin=5e-4)
+    plt.legend()
+
     plt.show()
