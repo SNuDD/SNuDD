@@ -478,6 +478,11 @@ if __name__ == "__main__":
     chi2_values = scan_no_nuisance_1D(eps_space)
     print(rel_uncertainty)
     chi2_alpha_values001, chi2_alpha_sm001 = scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.125)
+
+    ############### WE SHOULD USE THE RELATIVE UNCERTAINTY of 0.125 IN THE LOW ENERGY REGION 
+    ########################################################################################
+
+    
     chi2_alpha_values05, chi2_alpha_sm05 = scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.05)
 
     #min_chi2 = min([min(chi2_alpha_values), chi2_alpha_sm])
