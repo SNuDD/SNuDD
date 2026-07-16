@@ -63,12 +63,106 @@ def counts_xnt(signal, E_Rs, EL, ER):
 # load XenonNT 2022 expected background with neutrino signal subtracted in the way we did previously (no rrpa, no binding)
 ##########################
 
-
-ERs_mid, data_obs, XnT22_B0 = np.genfromtxt('../data/exps/xnt/2022_binned_data_bkgnonu.txt', unpack=True)
-
+ERs_mid, data_obs, XnT22_B0nonu = np.genfromtxt('../data/exps/xnt/2022_binned_data_bkgnonu.txt', unpack=True)
 
 
+B0_X, B0_Y, nu_X, nu_Y, data_X, data_Y = np.genfromtxt('../data/exps/xnt/2022data_bkd_datasets.csv', skip_header=2, delimiter=',', unpack=True)
 
+
+############### Deal with background stuff ############333
+from scipy import interpolate
+import pandas as pd
+
+f_BO = interpolate.interp1d(B0_X, B0_Y, bounds_error=False, fill_value='extrapolate')
+
+column_name=['DataER_mid', 'Data_counts']       
+datadf = pd.DataFrame(list(zip(data_X[data_X < 140 ], data_Y[data_X < 140 ])), columns=column_name )
+
+binned_B0 = f_BO(datadf['DataER_mid'])*2*1.16 # times binwidth times exposure in ton-yr 
+
+### subtract the neutrino signal from the background to get the expected background without neutrino signal 
+
+ELs = np.linspace(0.1, 28.0, 15)/1e6 ### Left of bin
+ERs = np.linspace(2.0, 30.0, 15)/1e6 ### Right of bin
+E_Rs = np.geomspace(1e-2, 2e2, 1000) / 1e6  # E in GeV
+
+Xe_nucleus = Nucleus(54, 132, mass=131.9041535 * config.u) # single isotope 
+
+
+SM_matrix = np.array([[0, 0, 0],
+                    [0, 0.0, 0],
+                    [0, 0, 0.0]])
+
+
+sm_model = GeneralNSI(SM_matrix, 0.0, 0.0)
+
+
+
+
+# Create bound electron object
+# Xe_electron = Electron(Xe_nucleus, binding_xe, rrpa_scaling)
+# 
+#  
+Xe_electron = Electron(Xe_nucleus, binding_xe)
+Xe_electron.update_model(sm_model)
+Xe_electron.prepare_density()
+
+sm_spec_er = Xe_electron.spectrum(E_Rs)
+
+SM_counts = [counts_xnt(sm_spec_er, E_Rs, ELs[i], ERs[i]) for i in range(len(ELs))]
+
+binned_B0nonu = binned_B0[:len(SM_counts)] - SM_counts
+
+def RRPA_step_no_STEP():
+
+    # ELs = np.linspace(0.1, 28.0, 15)/1e6 ### Left of bin
+    # ERs = np.linspace(2.0, 30.0, 15)/1e6 ### Right of bin
+    E_Rs = np.geomspace(1e-2, 2e2, 1000) / 1e6  # E in GeV
+
+    Xe_nucleus = Nucleus(54, 132, mass=131.9041535 * config.u) # single isotope 
+
+
+    SM_matrix = np.array([[0, 0, 0],
+                        [0, 0.0, 0],
+                        [0, 0, 0.0]])
+
+
+    sm_model = GeneralNSI(SM_matrix, 0.0, 0.0)
+
+
+
+
+    # Create bound electron object
+    Xe_electron_rrpa = Electron(Xe_nucleus, binding_xe, rrpa_scaling)
+    Xe_electron_rrpa.update_model(sm_model)
+    Xe_electron_rrpa.prepare_density()
+
+    sm_spec_er_rrpa = Xe_electron_rrpa.spectrum(E_Rs)
+
+    SM_counts_rrpa = counts_xnt(sm_spec_er_rrpa, E_Rs, 1e-7, 140/1e6) 
+
+    # 
+    #  
+    Xe_electron_steps = Electron(Xe_nucleus, binding_xe)
+    Xe_electron_steps.update_model(sm_model)
+    Xe_electron_steps.prepare_density()
+
+    sm_spec_er_steps = Xe_electron_steps.spectrum(E_Rs)
+
+    SM_counts_steps = counts_xnt(sm_spec_er_steps, E_Rs, 1e-7, 140/1e6)
+
+    #
+    Xe_electron_free = Electron(Xe_nucleus, electron_binder=None)
+    Xe_electron_free.update_model(sm_model)
+    Xe_electron_free.prepare_density()
+
+    sm_spec_er_free = Xe_electron_free.spectrum(E_Rs)
+
+    SM_counts_free = counts_xnt(sm_spec_er_free, E_Rs, 1e-7, 140/1e6)
+
+    print("SM counts with RRPA: ", np.sum(SM_counts_rrpa))
+    print("SM counts with steps: ", np.sum(SM_counts_steps))
+    print("SM counts with free: ", np.sum(SM_counts_free))
 
 @np.vectorize
 def loglike(Nsm, Nsig, Nbk):
@@ -87,10 +181,10 @@ def gauss(x, mu, sig):
 
 
 def plot():
-    ELs = np.linspace(0.0, 58.0, 30)/1e6
-    ERs = np.linspace(2.0, 60.0, 30)/1e6
+    ELs = np.linspace(0.1, 28.0, 15)/1e6
+    ERs = np.linspace(2.0, 30.0, 15)/1e6
 
-    E_Rs = np.logspace(-2, 2, 1000) / 1e6  # E in GeV
+    E_Rs = np.geomspace(1e-2, 2e2, 1000) / 1e6  # E in GeV
 
 
     # Create host nucleus
@@ -120,7 +214,7 @@ def plot():
 
 
         
-    plt.bar((ERs[:30] + ELs[:30])/2 *1e6, XnT22_B0[:30] ,  width= 2.0, edgecolor='black', alpha=0.5, label=r'XnT22_B0', align='center')
+    plt.bar((ERs[:] + ELs[:])/2 *1e6, binned_B0nonu[:] ,  width= 2.0, edgecolor='black', alpha=0.5, label=r'XnT22_B0', align='center')
 
     plt.bar((ELs+ERs)/2 *1e6, SM_counts, width=2.0, edgecolor='black', alpha=0.5, label=r'SM counts', align='center')
 
@@ -128,8 +222,8 @@ def plot():
     data_err = np.sqrt(data_obs)
 
     # Plot with error bars
-    plt.errorbar(ERs_mid[:30], data_obs[:30], 
-                xerr=1.0, yerr=data_err[:30],
+    plt.errorbar(ERs_mid[:], data_obs[:], 
+                xerr=1.0, yerr=data_err[:],
                 fmt='o',              # marker style (like scatter)
                 capsize=3,            # cap size on error bars
                 capthick=1,           # cap thickness
@@ -139,7 +233,7 @@ def plot():
                 color='black')
     
     #plt.scatter(ERs_mid[:30], data_obs[:30], label=r'XnT22 data')
-    plt.xlim(xmin=0.0,xmax=30.0)
+    plt.xlim(xmin=0.0,xmax=140.0)
     plt.show()
 
     # print(ERs_mid) 
@@ -245,7 +339,7 @@ from snudd.nsi import utils
 
 def set_NSI_params(eps, eta, phi):
     
-    eps_matrix = np.array([[0., 1.0, 0.], [1.0, 0.0, 0.], [0., 0, 0.0]]) * eps # eps_{e\mu} can change this structure 
+    eps_matrix = np.array([[1.0, 0.0, 0.], [0.0, 0.0, 0.], [0., 0, 0.0]]) * eps # eps_{e\mu} can change this structure 
     eps_matrix = utils.eps_matrix_sym(eps_matrix)
     nsi_model = GeneralNSI(eps_matrix, eta, phi)
     
@@ -257,11 +351,11 @@ def scan_no_nuisance_1D(eps_space):
     # Setting up grid 
     # eps_space = np.geomspace(1e-1, 0.5, 20)
     eta = 0.0 # therefore in the proton-neutron plane
-    phi = np.pi/2 # therefore in the electron direction
+    phi = -np.pi/2 # therefore in the electron direction
 
-    ELs = np.linspace(0.0, 58.0, 30)/1e6 ### Left of bin
-    ERs = np.linspace(2.0, 60.0, 30)/1e6 ### Right of bin
-    E_Rs = np.logspace(-2, 2, 1000) / 1e6  # E in GeV
+    ELs = np.linspace(1e-1, 28.0, 15)/1e6 ### Left of bin
+    ERs = np.linspace(2.0, 30.0, 15)/1e6 ### Right of bin
+    E_Rs = np.geomspace(1e-2, 2e2, 1000) / 1e6  # E in GeV
 
 
     # Initialize a 2D array: shape (n_eps, n_bins)
@@ -289,12 +383,13 @@ def scan_no_nuisance_1D(eps_space):
     chi2_values = np.zeros(len(eps_space)) 
 
     for i in range(len(eps_space)):
-        chi2_values[i] =   poisson_chi2(counts_all[i, :], XnT22_B0[:30],  data_obs[:30]) 
+        # chi2_values[i] =   poisson_chi2(counts_all[i, :15], XnT22_B0nonu[:15],  data_obs[:15]) 
+        chi2_values[i] =   poisson_chi2(counts_all[i, :15], binned_B0nonu[:15],  data_obs[:15]) 
 
     
     return chi2_values
 
-def scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.05):
+def scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.5):
     from scipy.optimize import minimize_scalar, minimize
 
     #plot()
@@ -302,9 +397,9 @@ def scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.05):
     #eps_space = np.geomspace(1e-1, 0.5, 20)
 
 
-    ELs = np.linspace(0.0, 58.0, 30)/1e6 ### Left of bin
-    ERs = np.linspace(2.0, 60.0, 30)/1e6 ### Right of bin
-    E_Rs = np.logspace(-2, 2, 1000) / 1e6  # E in GeV
+    ELs = np.linspace(1e-1, 28.0, 15)/1e6 ### Left of bin
+    ERs = np.linspace(2.0, 30.0, 15)/1e6 ### Right of bin
+    E_Rs = np.geomspace(1e-2, 2e2, 1000) / 1e6  # E in GeV
 
 
     # Initialize a 2D array: shape (n_eps, n_bins)
@@ -330,47 +425,42 @@ def scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.05):
         # Compute binned counts for this eps value
         counts_all[i, :] = np.array([counts_xnt(signal_temp, E_Rs, ELs[bc], ERs[bc]) for bc in range(len(ELs))])
 
+        # result = minimize(
+        #     fun = lambda a: poisson_chi2(counts_all[i, :15], XnT22_B0nonu[:15], data_obs[:15], alpha=a, sigma_alpha=rel_unc), 
+        #     x0=0,
+        #     jac = lambda a: derivative_poisson_chi2(counts_all[i, :15], XnT22_B0nonu[:15], data_obs[:15], alpha=a, sigma_alpha=rel_unc), 
+        #     # bounds=(-5, 5), 
+        #     method="L-BFGS-B"
+        #     )
         result = minimize(
-            fun = lambda a: poisson_chi2(counts_all[i, :], XnT22_B0[:30], data_obs[:30], alpha=a, sigma_alpha=rel_unc), 
+            fun = lambda a: poisson_chi2(counts_all[i, :15], binned_B0nonu[:15], data_obs[:15], alpha=a, sigma_alpha=rel_unc), 
             x0=0,
-            jac = lambda a: derivative_poisson_chi2(counts_all[i, :], XnT22_B0[:30], data_obs[:30], alpha=a, sigma_alpha=rel_unc), 
+            jac = lambda a: derivative_poisson_chi2(counts_all[i, :15], binned_B0nonu[:15], data_obs[:15], alpha=a, sigma_alpha=rel_unc), 
             # bounds=(-5, 5), 
             method="L-BFGS-B"
             )
         chi2_alpha_values[i] = result.fun
 
-    Xe_nucleus = Nucleus(54, 132, mass=131.9041535 * config.u) # single isotope 
-
-
-    SM_matrix = np.array([[0, 0, 0],
-                        [0, 0.0, 0],
-                        [0, 0, 0.0]])
-
-    eta = 0
-    phi = 0
-
-    sm_model = GeneralNSI(SM_matrix, eta, phi)
-
-
-    # Create bound electron object
-    Xe_electron = Electron(Xe_nucleus, binding_xe, rrpa_scaling) 
-    Xe_electron.update_model(sm_model)
-    Xe_electron.prepare_density()
-
-    sm_spec_er = Xe_electron.spectrum(E_Rs)
-
-    SM_counts = [counts_xnt(sm_spec_er, E_Rs, ELs[i], ERs[i]) for i in range(len(ELs))]
 
 
 
+
+    # resultsm = minimize(
+    #     fun = lambda a: poisson_chi2(SM_counts[:15], XnT22_B0nonu[:15], data_obs[:15], alpha=a, sigma_alpha=rel_unc), 
+    #     x0=0,
+    #     jac = lambda a: derivative_poisson_chi2(SM_counts[:15], XnT22_B0nonu[:15], data_obs[:15], alpha=a, sigma_alpha=rel_unc), 
+    #     # bounds=(-5, 5), 
+    #     method="L-BFGS-B"
+    #     )
+    
     resultsm = minimize(
-        fun = lambda a: poisson_chi2(SM_counts, XnT22_B0[:30], data_obs[:30], alpha=a, sigma_alpha=rel_unc), 
+        fun = lambda a: poisson_chi2(SM_counts[:15], binned_B0nonu[:15], data_obs[:15], alpha=a, sigma_alpha=rel_unc), 
         x0=0,
-        jac = lambda a: derivative_poisson_chi2(np.zeros_like(XnT22_B0[:30]), XnT22_B0[:30], data_obs[:30], alpha=a, sigma_alpha=rel_unc), 
+        jac = lambda a: derivative_poisson_chi2(SM_counts[:15], binned_B0nonu[:15], data_obs[:15], alpha=a, sigma_alpha=rel_unc), 
         # bounds=(-5, 5), 
         method="L-BFGS-B"
         )
-    
+        
     chi2_alpha_sm = resultsm.fun
     
     return chi2_alpha_values, chi2_alpha_sm
@@ -379,19 +469,23 @@ def scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.05):
 
 
 if __name__ == "__main__":
-    eps_space = np.geomspace(1e-1, 0.5, 20)
+
+    # plot()
+    eps_space = np.geomspace(0.9e-1, 4.0, 50)
     eta = 0.0 # therefore in the proton-neutron plane
-    phi = np.pi/2 # therefore in the electron direction
+    phi = -np.pi/2 # therefore in the electron direction
 
     chi2_values = scan_no_nuisance_1D(eps_space)
     print(rel_uncertainty)
-    chi2_alpha_values, chi2_alpha_sm = scan_nuisance_1D(eps_space, eta, phi, rel_unc=rel_uncertainty)
+    chi2_alpha_values001, chi2_alpha_sm001 = scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.125)
+    chi2_alpha_values05, chi2_alpha_sm05 = scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.05)
 
-    min_chi2 = min([min(chi2_alpha_values), chi2_alpha_sm])
+    #min_chi2 = min([min(chi2_alpha_values), chi2_alpha_sm])
 
     plt.semilogx(eps_space, chi2_values-np.min(chi2_values))
-    plt.semilogx(eps_space, chi2_alpha_values-np.min(chi2_alpha_values))
-    plt.semilogx(eps_space, chi2_alpha_values-min_chi2)
+    plt.semilogx(eps_space, chi2_alpha_values001-np.min(chi2_alpha_values001), ls='--')
+    plt.semilogx(eps_space, chi2_alpha_values05-np.min(chi2_alpha_values05), ls='--')
+    #plt.semilogx(eps_space, chi2_alpha_values-min_chi2)
 
     plt.axhline(2.71, color='k', ls='--')
 
@@ -400,3 +494,5 @@ if __name__ == "__main__":
     plt.ylabel(r'$\chi^2 - \chi^2_{\rm min}$', size=14)
 
     plt.show()
+
+    # RRPA_step_no_STEP()
