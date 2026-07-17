@@ -11,13 +11,15 @@ from scipy.special import erf
 
 
 def resolution_lux(E_R):
-    """Energy resolution (fractionally) as a function of the energy for LUX-ZEPLIN"""
+    """Energy resolution (fractionally) as a function of the energy for LUX-ZEPLIN
+       https://arxiv.org/pdf/1610.02076"""
     a = 0.33 * 1e-3  # Last factor is to convert from keV^{1/2} to GeV^{1/2}
     return a / np.sqrt(E_R)
 
 
 def resolution_xnt(E_R):
-    """Energy resolution (fractionally) as a function of the energy for Xenon N Tonne"""
+    """Energy resolution (fractionally) as a function of the energy for Xenon N Tonne
+        https://arxiv.org/pdf/2006.09721"""
     a = 0.310 * 1e-3  # Last factor is to convert from keV^{1/2} to GeV^{1/2}
     b = 0.0037
     return a / np.sqrt(E_R) + b
