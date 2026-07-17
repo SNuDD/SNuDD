@@ -11,24 +11,30 @@ from scipy.special import erf
 
 
 def resolution_lux(E_R):
-    """Energy resolution (fractionally) as a function of the energy for LUX-ZEPLIN"""
+    """Energy resolution (fractionally) as a function of the energy for LUX-ZEPLIN
+       https://arxiv.org/pdf/1610.02076"""
     a = 0.33 * 1e-3  # Last factor is to convert from keV^{1/2} to GeV^{1/2}
     return a / np.sqrt(E_R)
 
 
 def resolution_xnt(E_R):
-    """Energy resolution (fractionally) as a function of the energy for Xenon N Tonne"""
+    """Energy resolution (fractionally) as a function of the energy for Xenon N Tonne
+        https://arxiv.org/pdf/2006.09721"""
     a = 0.310 * 1e-3  # Last factor is to convert from keV^{1/2} to GeV^{1/2}
     b = 0.0037
     return a / np.sqrt(E_R) + b
 
 
 def resolution_pandaX(E_R):
-    """Energy resolution (fractionally) as a function of the energy for PandaX"""
-    a = 0.330 * 1e-3 
-    b = 0.016 
-    return a / np.sqrt(E_R) + b
+    """Energy resolution (fractionally) as a function of the energy for PandaX
+    Using https://arxiv.org/pdf/2206.02339"""
 
+    a = 0.073 
+    b = 0.173 * 1e-6 # last factor for keV to GeV 
+    c = -6.5e-3 * 1.0e-12 # last factor for keV^2 to GeV^2
+    d = 1.1e-4 * 1e-18 # last factor for keV^3 to GeV^3
+    
+    return a + b*E_R + c*E_R**2 + d*E_R**3
 
 
 
