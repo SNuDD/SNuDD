@@ -50,11 +50,10 @@ rel_uncertainty = total_err / total_val
 
 def counts_xnt(signal, E_Rs, EL, ER):
     exposure = 1.16 # in tn yr-1
-    acceptance_cut = 0.995  # 91% is quoted in 2207.11330
     convolution_xnt_sig= Convolver(E_Rs, signal , efficiency_xnt_er_22, res_xnt_er)
     
 
-    return convolution_xnt_sig.convolved_binned_rate(EL, ER)*exposure*acceptance_cut
+    return convolution_xnt_sig.convolved_binned_rate(EL, ER)*exposure
 
 
 
@@ -471,33 +470,33 @@ def scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.5):
 if __name__ == "__main__":
 
     # plot()
-    eps_space = np.geomspace(0.9e-1, 4.0, 50)
-    eta = 0.0 # therefore in the proton-neutron plane
-    phi = -np.pi/2 # therefore in the electron direction
+    # eps_space = np.geomspace(0.9e-1, 4.0, 50)
+    # eta = 0.0 # therefore in the proton-neutron plane
+    # phi = -np.pi/2 # therefore in the electron direction
 
-    chi2_values = scan_no_nuisance_1D(eps_space)
-    print(rel_uncertainty)
-    chi2_alpha_values001, chi2_alpha_sm001 = scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.125)
+    # chi2_values = scan_no_nuisance_1D(eps_space)
+    # print(rel_uncertainty)
+    # chi2_alpha_values001, chi2_alpha_sm001 = scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.125)
 
-    ############### WE SHOULD USE THE RELATIVE UNCERTAINTY of 0.125 IN THE LOW ENERGY REGION 
-    ########################################################################################
+    # ############### WE SHOULD USE THE RELATIVE UNCERTAINTY of 0.125 IN THE LOW ENERGY REGION 
+    # ########################################################################################
 
     
-    chi2_alpha_values05, chi2_alpha_sm05 = scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.05)
+    # chi2_alpha_values05, chi2_alpha_sm05 = scan_nuisance_1D(eps_space, eta, phi, rel_unc=0.05)
 
-    #min_chi2 = min([min(chi2_alpha_values), chi2_alpha_sm])
+    # #min_chi2 = min([min(chi2_alpha_values), chi2_alpha_sm])
 
-    plt.semilogx(eps_space, chi2_values-np.min(chi2_values))
-    plt.semilogx(eps_space, chi2_alpha_values001-np.min(chi2_alpha_values001), ls='--')
-    plt.semilogx(eps_space, chi2_alpha_values05-np.min(chi2_alpha_values05), ls='--')
-    #plt.semilogx(eps_space, chi2_alpha_values-min_chi2)
+    # plt.semilogx(eps_space, chi2_values-np.min(chi2_values))
+    # plt.semilogx(eps_space, chi2_alpha_values001-np.min(chi2_alpha_values001), ls='--')
+    # plt.semilogx(eps_space, chi2_alpha_values05-np.min(chi2_alpha_values05), ls='--')
+    # #plt.semilogx(eps_space, chi2_alpha_values-min_chi2)
 
-    plt.axhline(2.71, color='k', ls='--')
+    # plt.axhline(2.71, color='k', ls='--')
 
-    plt.ylim(0,16)
-    plt.xlabel(r'$\epsilon_{e\mu}$', size=14)
-    plt.ylabel(r'$\chi^2 - \chi^2_{\rm min}$', size=14)
+    # plt.ylim(0,16)
+    # plt.xlabel(r'$\epsilon_{e\mu}$', size=14)
+    # plt.ylabel(r'$\chi^2 - \chi^2_{\rm min}$', size=14)
 
-    plt.show()
+    # plt.show()
 
-    # RRPA_step_no_STEP()
+    RRPA_step_no_STEP()
