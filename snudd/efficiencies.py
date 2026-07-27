@@ -5,16 +5,15 @@ from scipy.optimize import root_scalar, brentq
 
 from snudd import config
 
-LZ_NR_DATA = np.loadtxt(config.get_data("exps/lz/LZ_NR.dat"), unpack=True)
-LZ_ER_DATA = np.loadtxt(config.get_data("exps/lz/LZ_ER.dat"), unpack=True)
-XNT_NR_DATA = np.loadtxt(config.get_data("exps/xnt/XNT_NR.dat"), unpack=True)
-XNT_ER_DATA = np.loadtxt(config.get_data("exps/xnt/XNT_ER.dat"), unpack=True)
+LZ_NR_DATA = np.loadtxt(config.get_data("exps/lz/LZ_NR.dat"), unpack=True) ### from arXiv:1802.06039
+LZ_ER_DATA = np.loadtxt(config.get_data("exps/lz/LZ_ER.dat"), unpack=True) ### from arXiv:1802.06039
+XNT_NR_DATA = np.loadtxt(config.get_data("exps/xnt/XNT_NR.dat"), unpack=True) ### from arXiv:1805.12562
+XNT_ER_DATA = np.loadtxt(config.get_data("exps/xnt/XNT_ER.dat"), unpack=True) ### from arXiv:2006.09721
 
 
-
-LZ_NR_22 =np.loadtxt(config.get_data("exps/lz/LZ_NR_first_data.txt"), unpack=True)
+LZ_NR_22 =np.loadtxt(config.get_data("exps/lz/LZ_NR_first_data.txt"), unpack=True) ### from arXiv:2207.03764
 LZ_NR_22 = np.array([LZ_NR_22[0][LZ_NR_22[1] > 0.0], LZ_NR_22[1][LZ_NR_22[1] > 0.0]]) ### get rid of the zero entries because they mess up with the interpolation
-XNT_ER_22 = np.loadtxt(config.get_data("exps/xnt/XNT_ER_22.csv"), delimiter=',', unpack=True)
+XNT_ER_22 = np.loadtxt(config.get_data("exps/xnt/XNT_ER_22.csv"), delimiter=',', unpack=True) ## from arXiv:2207.11330
 
 
 
@@ -23,12 +22,12 @@ XNT_ER_22 = np.loadtxt(config.get_data("exps/xnt/XNT_ER_22.csv"), delimiter=',',
 
 
 ##### NEW DATA
-LZ_B8_DATA = np.loadtxt(config.get_data("exps/LZ8B2025/LZB8-v2-Efficiency.csv"), delimiter=",", skiprows=7, unpack=True)
-PANDAX_DATA = np.loadtxt(config.get_data("exps/pandaX/pandaX.csv"), delimiter=',', skiprows=1, unpack=True)
-XNT_DATA = np.loadtxt(config.get_data("exps/xnt/xnt_efficiency.csv"), delimiter=',', skiprows=1, unpack=True)
+LZ_B8_DATA = np.loadtxt(config.get_data("exps/LZ8B2025/LZB8-v2-Efficiency.csv"), delimiter=",", skiprows=7, unpack=True) ### from arXiv:2512.08065
+PANDAX_DATA = np.loadtxt(config.get_data("exps/pandaX/pandaX.csv"), delimiter=',', skiprows=1, unpack=True) ### from arXiv:2407.10892
+XNT_DATA = np.loadtxt(config.get_data("exps/xnt/xnt_efficiency.csv"), delimiter=',', skiprows=1, unpack=True) ### from arXiv:2604.06002
 
-LZ_ER_WS22 = np.loadtxt(config.get_data("exps/LZ2025/WS2022_1DROI_eff_data.txt"), delimiter=" ", unpack=True)
-LZ_ER_WS24 = np.loadtxt(config.get_data("exps/LZ2025/WS2024_1DROI_eff_data.txt"), delimiter=" ", unpack=True)
+LZ_ER_WS22 = np.loadtxt(config.get_data("exps/LZ2025/WS2022_1DROI_eff_data.txt"), delimiter=" ", unpack=True) ### from arXiv:2511.17350
+LZ_ER_WS24 = np.loadtxt(config.get_data("exps/LZ2025/WS2024_1DROI_eff_data.txt"), delimiter=" ", unpack=True) ### from arXiv:2511.17350
 
 
 
