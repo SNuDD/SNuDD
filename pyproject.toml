@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "snudd"
+version = "1.0.0"
+authors = [
+    {name = "Dorian Amaral"},
+    {name = "David Cerdeno"},
+    {name = "Andrew Cheek"},
+    {name = "Valeria Costa"},
+    {name = "Patrick Foldenauer"},
+]
+readme = "README.md"
+requires-python = ">=3.8"
+
+[tool.setuptools.packages.find]
+include = ["snudd*"]
