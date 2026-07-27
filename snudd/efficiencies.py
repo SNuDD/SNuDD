@@ -17,6 +17,24 @@ LZ_NR_22 = np.array([LZ_NR_22[0][LZ_NR_22[1] > 0.0], LZ_NR_22[1][LZ_NR_22[1] > 0
 XNT_ER_22 = np.loadtxt(config.get_data("exps/xnt/XNT_ER_22.csv"), delimiter=',', unpack=True)
 
 
+
+
+
+
+
+##### NEW DATA
+LZ_B8_DATA = np.loadtxt(config.get_data("exps/LZ8B2025/LZB8-v2-Efficiency.csv"), delimiter=",", skiprows=7, unpack=True)
+PANDAX_DATA = np.loadtxt(config.get_data("exps/pandaX/pandaX.csv"), delimiter=',', skiprows=1, unpack=True)
+XNT_DATA = np.loadtxt(config.get_data("exps/xnt/xnt_efficiency.csv"), delimiter=',', skiprows=1, unpack=True)
+
+LZ_ER_WS22 = np.loadtxt(config.get_data("exps/LZ2025/WS2022_1DROI_eff_data.txt"), delimiter=" ", unpack=True)
+LZ_ER_WS24 = np.loadtxt(config.get_data("exps/LZ2025/WS2024_1DROI_eff_data.txt"), delimiter=" ", unpack=True)
+
+
+
+
+
+
 def linear_extend_strategy(E_R, E_thresh_50_new, efficiency):
     """Return linearly extended efficiency."""
     shift = efficiency.threshold_50 - E_thresh_50_new
@@ -52,8 +70,10 @@ def log_extend_strategy(E_R, E_thresh_50_new, efficiency):
 
 
 class Efficiency:
-    """An interpolant that returns the efficiency function along with some of its important properties. An extension
+    """
+    An interpolant that returns the efficiency function along with some of its important properties. An extension
     of the efficiency is also available.
+    Recoil energies are expected to be in GeV, and the data files are expected to be in keV, so the class handles the conversion internally.
     """
 
     def __init__(self, data, order=1):
@@ -95,6 +115,9 @@ class Efficiency:
                             funclist=[lambda E: self._interpolant(E), 0.])
 
 
+
+# Resolution functions are in terms of recoil energy, and are fractional (sigma / E_R)
+#TODO: Unify all of these!!
 efficiency_lz_nr = Efficiency(LZ_NR_DATA, order=2)
 threshold_50_lux_nr = efficiency_lz_nr.threshold_50  # TODO: Replace these with field call
 
@@ -109,7 +132,23 @@ threshold_50_xnt_er = efficiency_xnt_er.threshold_50
 
 
 
+
+#NEW ONES
+efficiency_lz_b8 = Efficiency(LZ_B8_DATA)
+#threshold_50_lz_b8 = efficiency_lz_b8.threshold_50
+
+efficiency_pandaX = Efficiency(PANDAX_DATA)
+
+efficiency_xnt_2026 = Efficiency(XNT_DATA)
+
+
+efficiency_lz_er_WS22 = Efficiency(LZ_ER_WS22)
+efficiency_lz_er_WS24 = Efficiency(LZ_ER_WS24)
+
+
+
 ######################
+# How are these different from the ones above? Are they just different datasets, or are they different in some other way? 
 efficiency_lz_nr_22 = Efficiency(LZ_NR_22)
 threshold_50_lux_nr_22 = efficiency_lz_nr_22.threshold_50 
 

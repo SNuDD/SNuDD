@@ -28,7 +28,7 @@ def invert_nsi_p(eps_p, eta, phi):
 
 def eps_matrix_sym(mat):
     """Return the symmetric NSI matrix given an UPPER triangular flavour matrix."""
-    return mat - np.tril(mat, -1) + np.triu(mat, 1).T
+    return mat - np.tril(mat, -1) + np.triu(mat.conj(), 1).T
 
 
 def map_eta(eta_prime, phi):

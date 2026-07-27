@@ -2,15 +2,73 @@
 from __future__ import annotations
 
 import typing
+import numpy as np
 from abc import ABC, abstractmethod
 
-import numpy as np
 
 import snudd.config as config
 
-
 if typing.TYPE_CHECKING:
     from snudd.targets import Nucleus, Electron
+
+
+
+
+
+
+
+
+#-------------------------- Helper functions ----------------------------------
+
+
+
+
+
+def _ER_max(Enu, mtarget):
+    """Maximum recoil energy ERmax for neutrino energy Enu of target mith mass mtarget."""
+    
+    return 2 * Enu**2 / (mtarget + 2 * Enu)
+
+
+
+def _nuclear_prefactor(nucleus, E_R, E_nu):
+    """Return commonly used nuclear model prefactor."""
+    
+    F_helm = nucleus.form_factor(E_R)
+    kin    = 1 - nucleus.mass * E_R / (2 * E_nu**2)
+    pref   = config.G_F ** 2 / np.pi * nucleus.mass * kin * F_helm ** 2
+
+    # Set cross section to zero if ER>ERmax
+    ERmax = _ER_max(E_nu, nucleus.mass)
+    mask  = E_R <= ERmax
+
+    return pref * mask
+
+
+
+def _is_hermitian_3x3(eps_mat):
+    """Checks whether the NSI matrix is a heritian 3x3 matrix."""
+
+    A   = np.asarray(eps_mat)
+    tol = 1e-10                # numerical tolerance
+
+    # Check shape
+    if A.shape != (3, 3):
+        return False, "3x3"
+
+    # Check hermiticity: A == A^\dagger 
+    return np.allclose(A, A.conj().T, atol=tol), "hermitian"
+
+
+
+
+
+
+#-------------------------- Model classes ----------------------------------
+
+
+
+
 
 
 class Model(ABC):
@@ -22,46 +80,35 @@ class Model(ABC):
         pass
 
     @abstractmethod
-    def electron_cross_section_flavour(self, electron: Electron, E_R, E_nu):
+    def electron_cross_section_flavour(self, E_R, E_nu):
         """Return cross section for target by flavour. Energies in GeV."""
         pass
 
 
-class SM(Model):
-    """The standard model neutrino scattering behaviour."""
 
-    def nucleus_cross_section_flavour(self, nucleus, E_R, E_nu):
-        """Return flavour-breakdown cross section for nucleus. Energy in GeV. model_params = g_x, m_A"""
-        Z, m_N, Q_nu_N = nucleus.Z, nucleus.mass, nucleus.Q_nu_N
-        cs_SM = Q_nu_N ** 2 / 4
-
-        cs_e = _nuclear_prefactor(nucleus, E_R, E_nu) * cs_SM
-        cs_mu = cs_e
-        cs_tau = cs_e
-
-        return np.array([cs_e, cs_mu, cs_tau])  # np array in order to work with vectorized function
-
-    def electron_cross_section_flavour(self, electron, E_R, E_nu):
-        """Return cross section for target by flavour. Energies in GeV."""
-        y = E_R / E_nu
-
-        cs_e = (2 * electron.mass * config.G_F ** 2 / np.pi *
-                ((1 + config.g_L) ** 2 + config.g_R ** 2 * (1 - y) ** 2 - (1 + config.g_L) * config.g_R *
-                 (config.m_e * y / E_nu)))
-        cs_mu = 2 * electron.mass / np.pi * (config.G_F ** 2 * (
-                config.g_L ** 2 + config.g_R ** 2 * (1 - y) ** 2 - config.g_L * config.g_R * config.m_e * y / E_nu))
-        cs_tau = cs_mu
-
-        return np.array([cs_e, cs_mu, cs_tau])  # np array in order to work with vectorized function
-
-
-        return np.array([c_sm, c_int, c_bsm])  # np array in order to work with vectorized function
 
 
 class GeneralNSI(Model):
     """A general NSI model, which takes a matrix of NSI couplings and angles."""
 
     def __init__(self, eps_matrix, eta, phi):
+        # In general, eps_matrix is a 3x3 array of complex numbers (the NSI magnitudes)
+        # Check if it is hermitian
+        herm3x3, message = _is_hermitian_3x3(eps_matrix)
+        if not herm3x3:
+            print(
+"""
+        *** WARNING ***
+NSI matrix 'eps_matrix' is not a {} matrix: 
+{}
+It should be a hermitian 3x3 matrix of the form:
+[[eps_ee,   eps_em,   eps_et],
+ [eps_em^*, eps_mm,   eps_mt],
+ [eps_et^*, eps_mt^*, eps_tt]]
+
+Code will run, but results may be unphysical!
+""".format(message, eps_matrix)
+            )
         self.eps_matrix = eps_matrix
         self.eta = eta
         self.phi = phi
@@ -96,57 +143,57 @@ class GeneralNSI(Model):
 
         return (self.xi_p * nucleus.Z + self.xi_n * nucleus.N) * self.eps_matrix
 
+
     def nucleus_cross_section_flavour(self, nucleus, E_R, E_nu):
-        """Return flavour cross section matrix. Eneregy in GeV"""
+        """Return flavour cross section matrix. Energy in GeV"""
 
-        Z, N, m_N, Q_nu_N = nucleus.Z, nucleus.N, nucleus.mass, nucleus.Q_nu_N
-
+        Q_nu_N   = nucleus.Q_nu_N
         G_matrix = self.G_nucleus_coupling_matrix(nucleus)
 
-        cs_sm = Q_nu_N ** 2 / 4 * np.diag((1,1,1))
-        cs_int = - Q_nu_N * G_matrix.real
-        cs_bsm = np.matmul(G_matrix, G_matrix.conjugate())
+        # Define full amplitude
+        # Note that we pull out a minus sign in the definition of Q_nu_N
+        A   = -Q_nu_N/2 * np.eye(3) + G_matrix
+        Asq = A.conjugate().T @ A
 
-        return np.multiply.outer(_nuclear_prefactor(nucleus, E_R, E_nu),
-                                 (cs_sm + cs_int + cs_bsm))
+        return np.multiply.outer(_nuclear_prefactor(nucleus, E_R, E_nu), Asq)
 
 
-    def electron_cross_section_flavour(self, electron, E_R, E_nu):
+    def electron_cross_section_flavour(self, E_R, E_nu):
         """Return flavour cross section matrix. Energies in GeV."""
 
-        eps_matrix, eta, phi =  self.eps_matrix, self.eta, self.phi  # This is the change!
-
-        g_L = config.g_L
-        g_R = config.g_R
+        eps_matrix =  self.eps_matrix 
         xi_e = self.xi_e
-        xi_p = self.xi_p
-        xi_n = self.xi_n 
 
-        GL_matrix = (np.array([[1,0,0],[0,0,0],[0,0,0]])   
-                    + g_L * np.diag([1,1,1]) 
-                    + 0.5*eps_matrix*xi_e)
+        prefactor = 2 * config.G_F ** 2 * config.m_e / np.pi
 
-        GR_matrix = (g_R*np.diag([1,1,1]) 
-                     + 0.5 * eps_matrix*xi_e)
+        # LH and RH coupling matrices
+        GL_matrix = np.diag([1,0,0]) + config.g_L * np.eye(3) + 0.5*eps_matrix*xi_e
+        GR_matrix = config.g_R*np.eye(3) + 0.5 * eps_matrix*xi_e
 
-        prefactor  = 2 * config.G_F ** 2 * config.m_e / np.pi
+        # Kinematic prefactors
+        kinL  = np.ones_like(E_R / E_nu)  # To get Lterm to be correct shape for sum
+        kinR  = (1 - E_R/E_nu)**2
+        kinLR = (config.m_e * E_R)/(2 * E_nu**2)
 
-        Lterm_shape_enhancement = (E_R / E_nu).shape  # To get Lterm to be correct shape for sum
+        # Cross section terms
+        Lterm  = np.multiply.outer(kinL,  GL_matrix.conjugate().T @ GL_matrix)
+        Rterm  = np.multiply.outer(kinR,  GR_matrix.conjugate().T @ GR_matrix)
+        LRterm = np.multiply.outer(kinLR, GL_matrix.conjugate().T @ GR_matrix + GR_matrix.conjugate().T @ GL_matrix)
 
-        Lterm = np.multiply.outer(np.ones(Lterm_shape_enhancement), np.matmul(GL_matrix, GL_matrix.conjugate()))
-        Rterm = np.multiply.outer((1 - E_R/E_nu)**2, np.matmul(GR_matrix, GR_matrix.conjugate()))
-        LRterm = np.multiply.outer(((config.m_e * E_R)/(2 * E_nu**2)), (np.matmul(GL_matrix, GR_matrix.conjugate())
-                                    + np.matmul(GR_matrix, GL_matrix.conjugate())))
+        # Set cross section to zero if ER>ERmax
+        ERmax = _ER_max(E_nu, config.m_e)
+        mask  = E_R <= ERmax
 
-        return prefactor * (Lterm + Rterm - LRterm)
+        return prefactor * (Lterm + Rterm - LRterm) * mask[..., None, None]
 
         
-def _nuclear_prefactor(nucleus, E_R, E_nu):
-    """Return commonly used nuclear model prefactor."""
-    F_helm = nucleus.form_factor(E_R)
-    return config.G_F ** 2 / np.pi * nucleus.mass * (
-            1 - nucleus.mass * E_R / (2 * E_nu ** 2)) * F_helm ** 2
 
 
 
 
+class SM(GeneralNSI):
+    """Wrapper class for the Standard Model neutrino scattering behaviour."""
+
+    def __init__(self):
+        eps_zero = np.zeros((3,3))
+        super().__init__(eps_zero, 0, 0)

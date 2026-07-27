@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from snudd import config
-from snudd.binding import ElectronBinder, binding_xe
+from snudd.binding import ElectronBinder, binding_xe, binding_ar
 from snudd.rrpa import rrpa_scaling
 from snudd.spectrum import SpectrumTrace
 from snudd.models import Model, SM
@@ -47,10 +47,16 @@ class Target(ABC):
 
         self._spec.prepare_probabilities()
 
-    def prepare_density(self):
-        """Prepare probability density for use in spectrum."""
-
-        self._spec.prepare_density()
+    def prepare_density(self, cnadirs=[-1], cnadir_weights=[1], fast=False):
+        """
+        Prepare neutrino density matrix for use in spectrum.
+        Give a list of cos(nadir) [cnadirs] and corresponding weights [cnadir_weights] to run earth matter evolution. 
+        If cnadirs = [-1], no earth matter evolution is done and the density matrix is identity.
+        Fast mode uses Magnus expansion for earth matter evolution instead of full numerical eigendecomposition.
+        """
+        if len(cnadirs) != len(cnadir_weights):
+            raise ValueError("Cnadirs and cnadir_weights must have the same shape.")
+        self._spec.prepare_density(cnadirs, cnadir_weights, fast)
 
 
 class Nucleus(Target):
@@ -135,7 +141,7 @@ class Electron(Target):
 
     def cross_section_flavour(self, E_R, E_nu):
         """Return flavour cross section from given model."""
-        return self.model.electron_cross_section_flavour(self, E_R, E_nu)
+        return self.model.electron_cross_section_flavour(E_R, E_nu)
 
 
 def helm_form_factor(q, A):
@@ -162,3 +168,6 @@ def j1(x):
 
 nucleus_xe = Nucleus(config.Z_xe, config.A_xe, mass=config.mass_xe)
 electron_xe = Electron(nucleus_xe, binding_xe, scaling=rrpa_scaling)
+
+nucleus_ar = Nucleus(config.Z_ar, config.A_ar, mass=config.mass_ar)
+electron_ar = Electron(nucleus_ar, binding_ar)

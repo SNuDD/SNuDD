@@ -8,6 +8,7 @@ import pandas as pd
 from snudd.config import get_data
 
 BINDING_XENON = pd.read_csv(get_data("binding_energies/binding_xenon.csv")).to_numpy().T
+BINDING_ARGON = pd.read_csv(get_data("binding_energies/binding_argon.csv")).to_numpy().T
 
 
 @dataclass
@@ -27,3 +28,5 @@ class ElectronBinder:
 
 
 binding_xe = ElectronBinder(*BINDING_XENON)
+binding_ar = ElectronBinder(*BINDING_ARGON)
+
