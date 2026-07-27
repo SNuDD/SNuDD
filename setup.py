@@ -5,6 +5,5 @@ setup(
     url='https://github.com/SNuDD/SNuDD.git',
     version="1.0.0",
     author='Dorian Amaral, David Cerdeno, Andrew Cheek, Valeria Costa, Patrick Foldenauer',
-    packages=['snudd'],
     packages=find_packages(),
 )
