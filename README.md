@@ -39,8 +39,9 @@ git clone https://github.com/SNuDD/SNuDD.git
 
 **SNuDD** can be locally installed from within the `SNuDD` repository by calling:
 ```bash
-pip install SNuDD
+pip install (-e) .
 ```
+Use the `-e` option for an editable installation.
 
 ## Usage
 Once installed, **SNuDD** can be included in your Python code via
