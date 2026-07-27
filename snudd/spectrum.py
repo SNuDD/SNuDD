@@ -4,9 +4,7 @@ from tkinter import E
 
 import typing
 
-import numba as nb
 import numpy as np
-from scipy.interpolate import interp1d
 from snudd import config
 from snudd.config import trapezoid
 from snudd.nsi.nsi_probabilities import DensityMatrixCalculator, interp_density_sm
@@ -16,13 +14,65 @@ if typing.TYPE_CHECKING:
     from snudd.targets import Target
 
 
-# --- Backend selection (NumPy or Numba) ---
+
+
+
+# --- Backend selection (Numba) ---
+# ---------------------------------
 # Minor speedup from Numba for large scans
 try:
     import numba as nb
     USE_NUMBA = True
+
+    # Only define this function if numba is available
+    @nb.njit(parallel=True, fastmath=True)
+    def _rate_kernel_numba(nu_fluxes, density_eff, dsigma_mat, weights):
+        """
+        Compute rates by explicit contraction and trapezoidal integration with precomputed weights, using Numba for speed. 
+        This is much faster than np.einsum + np.trapz for large scans, as it avoids overhead of these functions in the inner loop.
+
+        Shapes:
+            nu_fluxes  : (N_ER, N_Enu)
+            density_eff: (N_ER, N_Enu, 3, 3)
+            dsigma_mat : (N_ER, N_Enu, 3, 3)
+            weights    : (N_Enu, N_ER)  (trapezoidal weights for integration over E_nus, transposed to allow broadcasting with nu_fluxes)
+        """
+
+        N_ER, N_Enu = nu_fluxes.shape
+        rates = np.zeros(N_ER, dtype=np.complex128)
+
+        for r in nb.prange(N_ER):
+
+            integral = 0.0
+
+            for e in range(N_Enu):
+
+                trace = 0.0
+                for i in range(3):
+                    for j in range(3):
+                        # Note the order of indices in density_eff and dsigma_mat for the trace: 
+                        # we want sum_ij density_eff[r, e, i, j] * dsigma_mat[r, e, j, i]
+                        trace += density_eff[r, e, i, j] * dsigma_mat[r, e, j, i]
+
+                # Multiply by flux and trapezoidal weight for this E_nu and add to integral 
+                # (handcrafting the integration here to avoid overhead of np.einsum and np.trapz in the inner loop, which can be significant for large scans)
+                integral += nu_fluxes[r, e] * trace * weights[e, r]
+
+            rates[r] = integral
+
+        return rates
+
+
+# Raise error if function is called without Numbs support
 except ImportError:
     USE_NUMBA = False
+
+    def _rate_kernel_numba(*args, **kwargs):      
+        raise RuntimeError("Numba backend is not available\nInstall numba in your current Python environment to use this functionality")
+# ---------------------------------
+
+
+
 
 
 
@@ -209,10 +259,6 @@ class SpectrumTrace():
 
 
 
-
-
-
-
 def _trapezoid_weights(x):
     """Return trapezoid weights for integration over x array."""
     w = np.zeros_like(x)
@@ -224,46 +270,4 @@ def _trapezoid_weights(x):
     w[-1] = dx[-1] / 2
 
     return w
-
-
-
-
-@nb.njit(parallel=True, fastmath=True)
-def _rate_kernel_numba(nu_fluxes, density_eff, dsigma_mat, weights):
-    """
-    Compute rates by explicit contraction and trapezoidal integration with precomputed weights, using Numba for speed. 
-    This is much faster than np.einsum + np.trapz for large scans, as it avoids overhead of these functions in the inner loop.
-
-    Shapes:
-        nu_fluxes  : (N_ER, N_Enu)
-        density_eff: (N_ER, N_Enu, 3, 3)
-        dsigma_mat : (N_ER, N_Enu, 3, 3)
-        weights    : (N_Enu, N_ER)  (trapezoidal weights for integration over E_nus, transposed to allow broadcasting with nu_fluxes)
-    """
-
-    N_ER, N_Enu = nu_fluxes.shape
-    rates = np.zeros(N_ER, dtype=np.complex128)
-
-    for r in nb.prange(N_ER):
-
-        integral = 0.0
-
-        for e in range(N_Enu):
-
-            trace = 0.0
-            for i in range(3):
-                for j in range(3):
-                    # Note the order of indices in density_eff and dsigma_mat for the trace: 
-                    # we want sum_ij density_eff[r, e, i, j] * dsigma_mat[r, e, j, i]
-                    trace += density_eff[r, e, i, j] * dsigma_mat[r, e, j, i]
-
-            # Multiply by flux and trapezoidal weight for this E_nu and add to integral 
-            # (handcrafting the integration here to avoid overhead of np.einsum and np.trapz in the inner loop, which can be significant for large scans)
-            integral += nu_fluxes[r, e] * trace * weights[e, r]
-
-        rates[r] = integral
-
-    return rates
-
-
 
