@@ -1,12 +1,11 @@
 from setuptools import setup
 
 setup(
-    # Needed to silence warnings (and to be a worthwhile package)
     name='snudd',
-    url='https://github.com/dwpamaral/SNuDD.git',
+    url='https://github.com/SNuDD/SNuDD.git',
     version="1.0",
-    author='Dorian Amaral',
+    author='Dorian Amaral, David Cerdeno, Andrew Cheek, Valeria Costa, Patrick Foldenauer',
     packages=['snudd'],
-    # We will also need a readme eventually (there will be a warning)
+    # packages=setuptools.find_namespace_packages(),
     # long_description=open('README.txt').read(),
 )
