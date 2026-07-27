@@ -1,4 +1,7 @@
-# SNuDD
+
+<p align="center">
+    <img src="https://github.com/SNuDD/SNuDD/blob/main/snudd_logo.png" alt="Description" width="500">
+</p>
 
 [![arXiv](http://img.shields.io/badge/arXiv-2302.12846-B31B1B.svg)](https://arxiv.org/abs/2302.12846)
 
