@@ -1,6 +1,6 @@
 
 <p align="center">
-    <img src="https://github.com/SNuDD/SNuDD/blob/main/snudd_logo.png" alt="Description" width="500">
+    <img src="https://github.com/SNuDD/SNuDD/blob/main/snudd_logo.png" alt="Description" width="400">
 </p>
 
 [![arXiv](http://img.shields.io/badge/arXiv-2302.12846-B31B1B.svg)](https://arxiv.org/abs/2302.12846)
@@ -13,7 +13,7 @@ under an open-source license. All code examples shown here are bundled in a Jupy
 
 When using **SNuDD**, please cite:
 
-D. W. P. Amaral, D. Cerdeno, A. Cheek and P. Foldenauer, \
+- D. W. P. Amaral, D. Cerdeno, A. Cheek and P. Foldenauer, \
 *A direct detection view of the neutrino NSI landscape*,\
 [arXiv:2302.12846 [hep-ph]](https://arxiv.org/abs/2302.12846).
 
