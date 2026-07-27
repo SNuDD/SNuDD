@@ -20,12 +20,15 @@ D. W. P. Amaral, D. Cerdeno, A. Cheek and P. Foldenauer, \
 
 **SNuDD** does not have any external dependencies. It relies, however, on the python modules 
 
-- `numpy`: v>= 1.20.3
-- `matplotlib`: v>=3.3.4
-- `scipy`: v>=1.6.2
-- `pandas`: v>=1.3.0
-- `setuptools`: v>=52.0.0
-- `pymultinest`: v>=2.11
+- `numpy`: v>= 1.22
+- `scipy`: v>=1.8
+- `pandas`: v>=1.3
+- `numba`: v>0.57    (optional for minor speed-up)
+
+In order to run the `quick_start.ipynb` notebook, the following packages are needed
+
+- `ipykernel`
+- `matplotlib`
 
 
 
