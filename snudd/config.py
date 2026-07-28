@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from packaging import version
 import importlib.metadata
+from importlib.resources import files
 
 # Check for scipy version for deprecated 'trapz' method
 module_version = importlib.metadata.version("scipy")
@@ -14,9 +15,13 @@ else:
 from scipy.interpolate import interp1d
 
 
-_ROOT = os.path.abspath(os.path.dirname(__file__))
+
+
+
+
+_ROOT = files("snudd")
 def get_data(path):
-    return os.path.join(_ROOT, '../data', path)
+    return os.path.join(_ROOT, 'data', path)
 
 # Constants
 u     = 931.49410242 / 1000  # Dalton in GeV

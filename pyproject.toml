@@ -27,3 +27,6 @@ numba = [
 
 [tool.setuptools.packages.find]
 include = ["snudd*"]
+
+[tool.setuptools.package-data]
+snudd = ["data/*", "data/**/*"]
