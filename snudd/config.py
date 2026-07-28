@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from packaging import version
 import importlib.metadata
-from importlib.resources import files
+
 
 # Check for scipy version for deprecated 'trapz' method
 module_version = importlib.metadata.version("scipy")
@@ -15,7 +15,11 @@ else:
 from scipy.interpolate import interp1d
 
 
-
+# Get data file paths
+try:
+    from importlib.resources import files
+except ImportError:
+    from importlib_resources import files
 
 
 
