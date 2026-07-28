@@ -3,6 +3,7 @@
     <img src="https://github.com/SNuDD/SNuDD/blob/main/snudd_logo.png" alt="Description" width="400">
 </p>
 
+[![arXiv](http://img.shields.io/badge/arXiv-2607.22817-B31B1B.svg)](https://arxiv.org/abs/2607.22817)
 [![arXiv](http://img.shields.io/badge/arXiv-2302.12846-B31B1B.svg)](https://arxiv.org/abs/2302.12846)
 
 We present **SNuDD** (**S**olar **N**e**u**trinos for **D**irect **D**etection): a Python-based, open-source codebase for accurately computing solar neutrino scattering rates due to neutrino-electron and -nucleus scattering. **SNuDD** can be used to compute the SM scattering rates and the modified rates in the presence of BSM physics, such as in the form of non-standard interactions (NSI). **SNuDD** has been developed to consistently incorporate BSM neutrino physics effects both in neutrino propagation (solar and terrestrial) and in neutrino scattering within the detector. Additionally, **SNuDD** provides functionality to incorporate detector effects like energy thresholds, selection efficiencies, and resolution effects for generating realistic signal spectra.
@@ -12,6 +13,10 @@ under an open-source license. All code examples shown here are bundled in a Jupy
 
 
 When using **SNuDD**, please cite:
+
+- D. W. P. Amaral, D. Cerdeno, A. Cheek, V. Costa and P. Foldenauer, \
+*𝚂𝙽𝚞𝙳𝙳: Solar Neutrinos for Direct Detection*,\
+[arXiv:2607.22817 [hep-ph]](https://arxiv.org/abs/2607.22817).
 
 - D. W. P. Amaral, D. Cerdeno, A. Cheek and P. Foldenauer, \
 *A direct detection view of the neutrino NSI landscape*,\
@@ -59,7 +64,7 @@ We have created an example notebook in the `notebooks` sub-directory named `quic
 
 ### Setting Up a Model:
 
-First, we set up an NSI model. To specify a model, we must provide the $3\times3$ matrix of the NSI magnitudes in flavour space $\varepsilon^{\eta,\varphi}_{\alpha\beta}$, as well as the relative NSI strength with electrons, protons, and neutrons, which is encoded in the angles $\eta$ and $\varphi$. For the definition of the parametrisation used in the code, please refer to [arXiv:2302.12846 [hep-ph]](https://arxiv.org/abs/2302.12846).
+First, we set up an NSI model. To specify a model, we must provide the $3\times3$ matrix of the NSI magnitudes in flavour space $\varepsilon^{\eta,\varphi}_{\alpha\beta}$, as well as the relative NSI strength with electrons, protons, and neutrons, which is encoded in the angles $\eta$ and $\varphi$. For the definition of the parametrisation used in the code, please refer to [arXiv:2607.22817 [hep-ph]](https://arxiv.org/abs/2607.22817).
 
 In the following example code, we show how to set up an NSI model instance for a purely off-diagonal $\mu\tau$-coupling of magnitude $\varepsilon^{\eta,\varphi}_{\mu\tau}=0.1$, equal coupling strengths with protons and neutrons ($\eta=\pi/4$), and no coupling with electrons ($\varphi=0$).
 
