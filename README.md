@@ -60,7 +60,7 @@ Once installed, **SNuDD** can be included in your Python code via
 import snudd
 ```
 
-We have created an example notebook in the `notebooks` sub-directory named `quick_start.ipynb` that explain the basic functionality of **SNuDD** and we recommend going through them.
+We have created an example notebook in the `notebooks` sub-directory named `quick_start.ipynb` that contains examples illustrating the basic functionality of **SNuDD** and we recommend going through them:
 
 ### Setting Up a Model:
 
@@ -170,7 +170,7 @@ NSI_spec_nr = Xe_nucleus.spectrum(E_Rs)
 
 Computing accurate spectra for elastic neutrino-electron scattering (EvES) requires knowledge of the available electrons for scattering at a given neutrino energy.  **SNuDD**'s `Electron` object requires information about the host nucleus and its respective orbital binding energies. For a generic atom, the user can calculate the resulting electron recoil spectra according to the stepping approximation. For xenon targets, one can instead produce a spectrum scaled according to the relativistic random phase approximation (RRPA). The handling of the binding energies in the appropriate scattering prescription is implemented in the `Electron` class, and we illustrate how to generate an electron recoil spectrum in the following block of code.
 
-As for CEvNS, we first setup a `Nucleus` object for the host atom, which we use together with a `binding` object holding the orbital binding energies and an `rrpa_scaling` object to initialize an `Electron` object. As before, we a to feed the `Electron` object to current `GeneralNSI` model and pre-compute the neutrino density matrix. Finally, we can generate the EvES spectrum over a range of recoil energies.
+As for CEvNS, we first setup a `Nucleus` object for the host atom, which we use together with a `binding` object holding the orbital binding energies and an `rrpa_scaling` object to initialize an `Electron` object. As before, we need to feed the `Electron` object the current `GeneralNSI` model and pre-compute the neutrino density matrix. Finally, we can generate the EvES spectrum over a range of recoil energies.
 
 
 ```python
