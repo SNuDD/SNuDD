@@ -26,15 +26,15 @@ except ImportError:
     USE_JAX = False
 
 
-
-
-
-
-
 def jitify(f):
     """Utility to JIT-compile a function if JAX is available, otherwise return it unchanged."""
     return jit(f) if USE_JAX else f
 
+
+# --- Global flag to control Magnus expansion linearization ---
+# If True, use only the first-order Magnus term (linear approximation); 
+# If False, include second-order commutator term for better accuracy.
+MAGNUS_LINEARIZE = True
 
 
 
@@ -258,7 +258,7 @@ _core_evolution_kernel = jitify(_core_evolution_kernel)
 
 
 
-def _magnus_evolve(H, dxs, tRad):
+def _magnus_evolve(H, dxs, tRad, linearize=False):
     """
     Alternative evolution using the Magnus expansion up to second order
     Approximate S ≈ exp(-i · (Ω1 + Ω2)) where Ω is Hermitian order-by-order.
@@ -272,28 +272,37 @@ def _magnus_evolve(H, dxs, tRad):
      - S: (N_E, 3, 3) array of final evolution matrices S[n] = M[n,0] @ M[n,1] @ ... @ M[n,Nst-1]
     """
 
+    # In practice we use the Magnus expansion only for small Nst (e.g., 50) and moderate H, so truncating at second order is usually sufficient. 
+    # For larger Nst or stronger H, the exact eigendecomposition + scan is more accurate.
+    # We rescale the Magnus terms as Ω/tRad and work in unit length, then multiply by tRad at the end to get the correct phase.
+
     # First order term: Ω1 = Σ H_k · dx_k Hermitian
-    Omega1 = np.sum(H * dxs[None,:,None,None], axis=1)
+    Omega1 = np.sum(H * dxs[None,:,None,None], axis=1, dtype=np.complex128)  # (N_E, 3, 3)
 
-    # Second order term: Ω2 = -i/2 Σ_{k<l} [H_k, H_l] · dx_k · dx_l
-    # Since [H_i,H_j] is anti-Hermitian, multiplying by i makes Ω2 Hermitian.
-    Omega2 = np.zeros_like(Omega1, dtype=np.complex128)
+    Omega = Omega1
 
-    for i in range(len(dxs)):
-        Hi = H[:, i]
+    # Skip the second order term if linearize=True
+    if not linearize:
 
-        for j in range(i):
-            Hj = H[:, j]
+        # Second order term: Ω2 = -i/2 Σ_{k<l} [H_k, H_l] · dx_k · dx_l
+        # Since [H_i,H_j] is anti-Hermitian, multiplying by i makes Ω2 Hermitian.
+        # The second order term Ω2/tRad^2
+        Omega2 = np.zeros_like(Omega1, dtype=np.complex128)
 
-            comm = Hi @ Hj - Hj @ Hi
-            Omega2 += 0.5j * comm * dxs[i] * dxs[j]
+        for i in range(len(dxs)):
+            Hi = H[:, i]
 
-    # Eigendecomposition of Magnus expansion for total Ω = Ω1 + Ω2
-    Omega = Omega1 + Omega2
+            for j in range(i):
+                Hj = H[:, j]
+
+                comm = Hi @ Hj - Hj @ Hi
+                Omega2 += 0.5j * comm * dxs[i] * dxs[j]
+
+        # Eigendecomposition of Magnus expansion for total Ω = Ω1 + Ω2
+        Omega += Omega2 * tRad  
 
     Em, Um = np.linalg.eigh(Omega)  # (N_E,3),(N_E,3,3)
-
-    phase = np.exp(-1j * Em * tRad)
+    phase  = np.exp(-1j * Em * tRad)
 
     return np.einsum('nia,na,nja->nij', Um, phase, Um.conj())
 
@@ -404,7 +413,7 @@ class EarthProbEvolve:
         # ------------------------------------------------------------------ #
         if fast:
             # Fast but less accurate: use Magnus expansion instead of exact eigendecomposition + scan
-            return np.array(_magnus_evolve(H, dxs, self.tRad))
+            return np.array(_magnus_evolve(H, dxs, self.tRad, linearize=MAGNUS_LINEARIZE))
         
         else:
             # Exact but slower: eigendecomposition + scan. JIT-compiled with JAX if available for speed.
@@ -430,105 +439,3 @@ class EarthProbEvolve:
         S    = self.S_matrix_batch(np.asarray(enus_GeV), cnadir, fast)   # (N_E, 3, 3)
         Sdag = np.swapaxes(S.conj(), -1, -2)
         return np.matmul(np.matmul(S, rho_solar), Sdag)
-
-
-
-
-
-
-
-
-
-
-######################################################################################################
-#
-#                                  OLD CODE BELOW, KEPT FOR REFERENCE
-#                               (not used in the current implementation)    
-#
-######################################################################################################
-
-
-
-
-
-
-
-class EarthProbEvolveOld:
-    """Old version of EarthProbEvolve with per-energy loop and no precomputation; kept for reference."""
-    def __init__(self,  model, osc_params=osc.osc_params_best, 
-                 earthmodel: Optional[EarthModel] = None, Nst: int = 50, Nav: int = 50):
-        self.osc_params = osc_params
-        self.model= model
-        self.earthmodel = earthmodel  # can be any EarthModel
-        self.Nst = int(Nst); self.Nav = int(Nav)
-        self.ERad = CF * RE_KM
-        self.ARad = CF * ATM_KM
-        self.tRad = self.ERad + self.ARad
-
-    def _vacuum_H(self, Enu: float) -> np.ndarray:
-        U = osc.UPMNS(self.osc_params)
-        diag = np.diag([0.0, self.osc_params.delta_m12/(2*Enu), self.osc_params.delta_m31/(2*Enu)])
-        return U @ diag @ U.conj().T
-
-    def _V_matrix(self) -> np.ndarray:
-        epsmat = self.model.eps_matrix
-        return (np.array([[1.0 , 0.0 , 0.0], 
-                   [0.0, 0.0 ,0.0], 
-                   [0.0, 0.0, 0.0 ]], dtype=np.complex128) + epsmat)
-
-    def _r_over_RE_along_chord(self, x: float, cnadir: float) -> float:
-        norm = 1.0 / (RE_KM + ATM_KM)
-        root_common = np.sqrt(max(0.0, 1.0 - (norm*RE_KM)**2 * (1 - cnadir*cnadir)))
-        r_dimless = np.sqrt(max(0.0, 1 + x*x - 2*x*root_common)) / (norm*RE_KM)
-        return r_dimless
-
-    def S_matrix(self, Enu_GeV: float, cnadir: float) -> np.ndarray:
-        if np.arccos(cnadir) >= np.pi/2:
-            return np.eye(3, dtype=np.complex128)
-
-        Enu = Enu_GeV 
-        Hv = self._vacuum_H(Enu)
-        Vf = self._V_matrix()
-
-        t1 = (self.ERad*cnadir + np.sqrt(max(0.0, self.tRad*self.tRad
-                  - self.ERad*self.ERad*(1 - cnadir*cnadir)))) / self.tRad
-
-        S = np.eye(3, dtype=np.complex128)
-        for k in range(self.Nst):
-            xmin = (t1 * k) / self.Nst
-            xmax = (t1 * (k+1)) / self.Nst
-            # average Ye*rho for this slice from whichever model was provided
-            Vav = 0.0
-            for l in range(self.Nav + 1):
-                xi = xmin + (xmax - xmin) * (l/(self.Nav + 1))
-                r_over_RE = self._r_over_RE_along_chord(xi, cnadir)
-                Vav += self.earthmodel.rhoYe_gcm3(r_over_RE)
-            Vav /= (self.Nav + 1)
-
-            H = Hv + s2GFNa * Vav * Vf
-            Em, Um = np.linalg.eigh(H)
-            phase = np.exp(-1j * Em * self.tRad * (xmax - xmin))
-            S = S @ (Um @ np.diag(phase) @ Um.conj().T)
-        return S
-    
-    def evolve_rhosolar(self, rho_solar, enus_GeV, cnadir):
-        """
-        rho_solar_stack: (N_E,3,3) complex array  [your solar density matrices at Earth surface]
-        enus_GeV       : (N_E,) energies
-        cnadir           : scalar cos(nadir)
-        propagator     : an object with S_matrix(E, cnadir) -> (3,3) complex
-
-        Returns:
-        rho_earth_stack : (N_E,3,3) complex
-        """
-        # 1) build S(E) for all energies
-        S_list = [self.S_matrix(E, cnadir) for E in enus_GeV]
-        S = np.stack(S_list, axis=0)                    # (N_E,3,3)
-        Sdag = np.swapaxes(S.conj(), -1, -2)            # (N_E,3,3)
-
-        # 2) batch multiply: S ρ S†   (use matmul with batch dims)
-        tmp = np.matmul(S, rho_solar)             # (N_E,3,3)
-        rho_earth = np.matmul(tmp, Sdag)          # (N_E,3,3)
-
-
-        return rho_earth 
